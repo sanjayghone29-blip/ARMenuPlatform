@@ -1,0 +1,413 @@
+﻿@using System.Data
+@{
+    Layout = "_AdminLayout";
+    var restaurant   = ViewBag.Restaurant as DataRow;
+    var dishes       = ViewBag.Dishes     as DataTable;
+    var restaurantId = (int) restaurant!["RestaurantID"];
+    var planType     = restaurant["PlanType"].ToString()!;
+    var maxDishes    = Convert.ToInt32(restaurant["MaxDishes"]);
+    var activeDishes = (int) ViewBag.ActiveDishCount;
+    var limitDisplay = maxDishes >= 999999 ? "Unlimited" : maxDishes.ToString();
+
+    ViewData["Title"]      = $"Dishes — {restaurant["RestaurantName"]}";
+    ViewData["ActivePage"] = "Restaurants";
+}
+
+@section Styles {
+<style>
+    .page-heading    { font-size: 1.3rem; font-weight: 700; color: #0f172a; }
+    .page-subheading { font-size: 0.82rem; color: #94a3b8; margin-top: 2px; }
+
+    /* ── Plan usage bar ─────────────────────────────────────────────── */
+    .usage-bar-wrap {
+        background: #fff;
+        border: 1px solid #f1f5f9;
+        border-radius: 12px;
+        padding: 16px 20px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .usage-label { font-size: 0.8rem; font-weight: 600; color: #475569; margin-bottom: 6px; }
+    .usage-bar-bg {
+        height: 8px; background: #e2e8f0; border-radius: 99px; overflow: hidden;
+    }
+    .usage-bar-fill {
+        height: 100%; border-radius: 99px;
+        background: linear-gradient(90deg, #1d4ed8, #6366f1);
+        transition: width 0.6s ease;
+    }
+    .usage-bar-fill.warning { background: linear-gradient(90deg, #f59e0b, #ef4444); }
+    .usage-count { font-size: 0.75rem; color: #94a3b8; margin-top: 5px; }
+
+    /* ── Section card ───────────────────────────────────────────────── */
+    .section-card {
+        background: #fff;
+        border-radius: 14px;
+        border: 1px solid #f1f5f9;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+        overflow: hidden;
+    }
+    .section-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 16px 20px; border-bottom: 1px solid #f1f5f9;
+        flex-wrap: wrap; gap: 10px;
+    }
+    .section-title { font-size: 0.92rem; font-weight: 700; color: #0f172a; }
+
+    /* ── Dish grid ──────────────────────────────────────────────────── */
+    .dishes-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    .dishes-table thead th {
+        background: #f8fafc; font-size: 0.7rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.05em; color: #64748b;
+        padding: 10px 14px; text-align: left;
+        border-bottom: 1px solid #e2e8f0; white-space: nowrap;
+    }
+    .dishes-table tbody tr { border-bottom: 1px solid #f1f5f9; transition: background 0.12s; }
+    .dishes-table tbody tr:hover { background: #f8fafc; }
+    .dishes-table tbody tr:last-child { border-bottom: none; }
+    .dishes-table td { padding: 12px 14px; vertical-align: middle; color: #334155; }
+    .dishes-table tr.inactive-row { opacity: 0.55; }
+
+    /* ── Thumbnail ──────────────────────────────────────────────────── */
+    .dish-thumb {
+        width: 52px; height: 52px;
+        border-radius: 9px; object-fit: cover;
+        border: 1px solid #e2e8f0;
+        background: #f1f5f9;
+        flex-shrink: 0;
+    }
+    .dish-thumb-placeholder {
+        width: 52px; height: 52px;
+        border-radius: 9px;
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        display: flex; align-items: center; justify-content: center;
+        color: #cbd5e1; font-size: 1.3rem;
+        flex-shrink: 0;
+    }
+
+    /* ── Badges ─────────────────────────────────────────────────────── */
+    .badge-category, .badge-content {
+        display: inline-block;
+        font-size: 0.68rem; font-weight: 700;
+        padding: 3px 9px; border-radius: 5px;
+        white-space: nowrap; letter-spacing: 0.02em;
+    }
+    .badge-category { background: #f1f5f9; color: #475569; }
+
+    .badge-content.video   { background: #dbeafe; color: #1e40af; }
+    .badge-content.model3d { background: #ede9fe; color: #5b21b6; }
+
+    .veg-dot {
+        width: 14px; height: 14px;
+        border-radius: 3px;
+        border: 1.5px solid;
+        display: inline-flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+    }
+    .veg-dot.veg    { border-color: #16a34a; }
+    .veg-dot.veg::after {
+        content: ''; width: 7px; height: 7px;
+        background: #16a34a; border-radius: 50%;
+    }
+    .veg-dot.nonveg { border-color: #dc2626; }
+    .veg-dot.nonveg::after {
+        content: ''; width: 0; height: 0;
+        border-left: 4px solid transparent;
+        border-right: 4px solid transparent;
+        border-bottom: 7px solid #dc2626;
+    }
+
+    .spice-pill {
+        font-size: 0.68rem; font-weight: 600;
+        padding: 2px 8px; border-radius: 20px; white-space: nowrap;
+    }
+    .spice-none   { background:#f1f5f9; color:#64748b; }
+    .spice-mild   { background:#fef9c3; color:#854d0e; }
+    .spice-medium { background:#ffedd5; color:#c2410c; }
+    .spice-hot    { background:#fee2e2; color:#991b1b; }
+
+    /* ── Toggle button ──────────────────────────────────────────────── */
+    .btn-toggle {
+        font-size: 0.72rem; font-weight: 600;
+        padding: 4px 11px; border-radius: 7px;
+        border: none; cursor: pointer;
+        transition: opacity 0.15s;
+        display: inline-flex; align-items: center; gap: 4px;
+        white-space: nowrap;
+    }
+    .btn-toggle:hover { opacity: 0.8; }
+    .btn-toggle.deactivate { background: #fee2e2; color: #b91c1c; }
+    .btn-toggle.activate   { background: #dcfce7; color: #15803d; }
+
+    .btn-back {
+        background: #f1f5f9; border: none; border-radius: 9px;
+        color: #475569; font-weight: 600; font-size: 0.875rem;
+        padding: 8px 16px; cursor: pointer; text-decoration: none;
+        display: inline-flex; align-items: center; gap: 6px;
+        transition: background 0.15s;
+    }
+    .btn-back:hover { background: #e2e8f0; color: #1e293b; }
+
+    .btn-add {
+        background: linear-gradient(135deg, #1d4ed8, #6366f1);
+        border: none; border-radius: 9px; color: #fff;
+        font-weight: 600; font-size: 0.875rem;
+        padding: 8px 18px; cursor: pointer; text-decoration: none;
+        display: inline-flex; align-items: center; gap: 6px;
+        transition: opacity 0.15s;
+    }
+    .btn-add:hover { opacity: 0.9; color: #fff; }
+    .btn-add:disabled {
+        opacity: 0.45; cursor: not-allowed;
+        pointer-events: none;
+    }
+
+    /* ── Alerts ─────────────────────────────────────────────────────── */
+    .alert-success {
+        background: #f0fdf4; border: 1.5px solid #86efac;
+        border-radius: 10px; color: #15803d;
+        padding: 12px 16px; font-size: 0.875rem;
+    }
+    .alert-error {
+        background: #fef2f2; border: 1.5px solid #fecaca;
+        border-radius: 10px; color: #b91c1c;
+        padding: 12px 16px; font-size: 0.875rem;
+    }
+
+    /* ── Empty state ────────────────────────────────────────────────── */
+    .empty-state { text-align: center; padding: 56px 20px; color: #94a3b8; }
+    .empty-state i { font-size: 2.5rem; margin-bottom: 12px; display: block; }
+
+    .table-scroll { overflow-x: auto; }
+
+    /* ── Plan badge ─────────────────────────────────────────────────── */
+    .badge-plan {
+        font-size: 0.7rem; font-weight: 700;
+        padding: 3px 9px; border-radius: 5px; letter-spacing: 0.03em;
+    }
+    .badge-plan.basic      { background: #f1f5f9; color: #475569; }
+    .badge-plan.pro        { background: #ede9fe; color: #6d28d9; }
+    .badge-plan.enterprise { background: #dbeafe; color: #1d4ed8; }
+</style>
+}
+
+<!-- ── Page heading ──────────────────────────────────────────────────────── -->
+<div class="mb-4 d-flex align-items-center justify-content-between flex-wrap gap-3">
+    <div>
+        <div class="page-heading">
+            @restaurant["RestaurantName"]
+            <span class="badge-plan @planType.ToLower()" style="vertical-align:middle; margin-left:6px;">@planType</span>
+        </div>
+        <div class="page-subheading">Dish Management</div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="/Admin/Dashboard" class="btn-back">
+            <i class="bi bi-arrow-left"></i> Dashboard
+        </a>
+        @{
+            bool atLimit = maxDishes < 999999 && activeDishes >= maxDishes;
+        }
+        <a href="/Admin/AddDish/@restaurantId"
+           class="btn-add @(atLimit ? "disabled" : "")"
+           title="@(atLimit ? $"Plan limit of {maxDishes} active dishes reached" : "Add a new dish")">
+            <i class="bi bi-plus-lg"></i> Add Dish
+        </a>
+    </div>
+</div>
+
+<!-- ── Alerts ────────────────────────────────────────────────────────────── -->
+@if (ViewBag.SuccessMessage != null)
+{
+    <div class="alert-success mb-3">
+        <i class="bi bi-check-circle-fill me-2"></i>@ViewBag.SuccessMessage
+    </div>
+}
+@if (ViewBag.ErrorMessage != null)
+{
+    <div class="alert-error mb-3">
+        <i class="bi bi-exclamation-circle-fill me-2"></i>@ViewBag.ErrorMessage
+    </div>
+}
+
+<!-- ── Plan usage bar ────────────────────────────────────────────────────── -->
+<div class="usage-bar-wrap mb-4">
+    <div class="usage-label">
+        <i class="bi bi-layers me-1"></i>Dish Limit Usage
+    </div>
+    @{
+        var pct     = maxDishes >= 999999 ? 0 : (int) Math.Min(100, activeDishes * 100.0 / maxDishes);
+        var warning = maxDishes < 999999 && activeDishes >= (int)(maxDishes * 0.8);
+    }
+    <div class="usage-bar-bg">
+        <div class="usage-bar-fill @(warning ? "warning" : "")"
+             style="width: @(maxDishes >= 999999 ? 15 : pct)%"></div>
+    </div>
+    <div class="usage-count">
+        @if (maxDishes >= 999999)
+        {
+            <text>@activeDishes active dishes &nbsp;·&nbsp; Unlimited plan</text>
+        }
+        else
+        {
+            <text>@activeDishes of @maxDishes active dishes used</text>
+            if (atLimit)
+            {
+                <span style="color:#dc2626; font-weight:600; margin-left:6px;">
+                    <i class="bi bi-exclamation-triangle-fill"></i> Limit reached
+                </span>
+            }
+        }
+    </div>
+</div>
+
+<!-- ── Dishes table ───────────────────────────────────────────────────────── -->
+<div class="section-card">
+    <div class="section-header">
+        <div class="section-title">
+            <i class="bi bi-grid me-2 text-primary"></i>
+            All Dishes
+            <span style="font-size:0.78rem; font-weight:400; color:#94a3b8; margin-left:6px;">
+                (@(dishes?.Rows.Count ?? 0) total)
+            </span>
+        </div>
+    </div>
+
+    <div class="table-scroll">
+        @if (dishes != null && dishes.Rows.Count > 0)
+        {
+            <table class="dishes-table">
+                <thead>
+                    <tr>
+                        <th style="width:60px;"></th>
+                        <th>Dish</th>
+                        <th>Category</th>
+                        <th>Content</th>
+                        <th>Price</th>
+                        <th>Type</th>
+                        <th>Spice</th>
+                        <th>Order</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (DataRow dish in dishes.Rows)
+                    {
+                        var isActive    = Convert.ToBoolean(dish["IsActive"]);
+                        var isVeg       = Convert.ToBoolean(dish["IsVegetarian"]);
+                        var contentType = dish["ContentType"].ToString()!;
+                        var spiceLevel  = dish["SpiceLevel"].ToString()!;
+                        var thumbUrl    = dish["ThumbnailURL"] == DBNull.Value ? "" : dish["ThumbnailURL"].ToString();
+                        var dishId      = dish["DishID"].ToString();
+                        var dishName    = dish["DishName"].ToString();
+
+                        <tr class="@(!isActive ? "inactive-row" : "")">
+                            <!-- Thumbnail -->
+                            <td style="padding-left:14px; padding-right:6px;">
+                                @if (!string.IsNullOrEmpty(thumbUrl))
+                                {
+                                    <img src="@thumbUrl" class="dish-thumb" alt="@dishName" loading="lazy" />
+                                }
+                                else
+                                {
+                                    <div class="dish-thumb-placeholder">
+                                        <i class="bi bi-image"></i>
+                                    </div>
+                                }
+                            </td>
+
+                            <!-- Name + Description -->
+                            <td>
+                                <div style="font-weight:600; color:#0f172a; max-width:200px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                    @dishName
+                                </div>
+                                @if (dish["Description"] != DBNull.Value && !string.IsNullOrEmpty(dish["Description"].ToString()))
+                                {
+                                    <div style="font-size:0.75rem; color:#94a3b8; max-width:200px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                        @dish["Description"].ToString()
+                                    </div>
+                                }
+                            </td>
+
+                            <!-- Category -->
+                            <td><span class="badge-category">@dish["Category"]</span></td>
+
+                            <!-- Content type -->
+                            <td>
+                                @if (contentType == "Video")
+                                {
+                                    <span class="badge-content video"><i class="bi bi-camera-video-fill me-1"></i>Video</span>
+                                }
+                                else
+                                {
+                                    <span class="badge-content model3d"><i class="bi bi-box me-1"></i>3D Model</span>
+                                }
+                            </td>
+
+                            <!-- Price -->
+                            <td style="font-weight:600;">₹@string.Format("{0:N2}", dish["Price"])</td>
+
+                            <!-- Veg/Non-Veg dot -->
+                            <td>
+                                <div class="d-flex align-items-center gap-1">
+                                    <span class="veg-dot @(isVeg ? "veg" : "nonveg")"></span>
+                                    <span style="font-size:0.72rem; color:#64748b;">@(isVeg ? "Veg" : "Non-veg")</span>
+                                </div>
+                            </td>
+
+                            <!-- Spice level -->
+                            <td>
+                                @{
+                                    var spiceClass = spiceLevel.ToLower() switch {
+                                        "mild"   => "spice-mild",
+                                        "medium" => "spice-medium",
+                                        "hot"    => "spice-hot",
+                                        _        => "spice-none"
+                                    };
+                                }
+                                <span class="spice-pill @spiceClass">@spiceLevel</span>
+                            </td>
+
+                            <!-- Display order -->
+                            <td style="color:#94a3b8; font-size:0.82rem;">@dish["DisplayOrder"]</td>
+
+                            <!-- Toggle active/inactive -->
+                            <td>
+                                <form method="post" action="/Admin/ToggleDish" style="display:inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="dishId"       value="@dishId" />
+                                    <input type="hidden" name="restaurantId" value="@restaurantId" />
+                                    <button type="submit"
+                                            class="btn-toggle @(isActive ? "deactivate" : "activate")"
+                                            onclick="return confirm('@(isActive ? $"Deactivate {dishName}?" : $"Activate {dishName}?")')">
+                                        @if (isActive)
+                                        {
+                                            <i class="bi bi-toggle2-on"></i> <text>Active</text>
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-toggle2-off"></i> <text>Inactive</text>
+                                        }
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        else
+        {
+            <div class="empty-state">
+                <i class="bi bi-egg-fried"></i>
+                <div style="font-weight:600; color:#475569;">No dishes yet</div>
+                <div style="font-size:0.82rem; margin-top:4px;">
+                    Add the first dish for @restaurant["RestaurantName"].
+                </div>
+                <a href="/Admin/AddDish/@restaurantId" class="btn-add mt-3"
+                   style="display:inline-flex; margin:16px auto 0;">
+                    <i class="bi bi-plus-circle"></i> Add First Dish
+                </a>
+            </div>
+        }
+    </div>
+</div>

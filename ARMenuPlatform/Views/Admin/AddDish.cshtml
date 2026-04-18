@@ -1,0 +1,538 @@
+﻿@using System.Data
+@{
+    Layout = "_AdminLayout";
+    var restaurant   = ViewBag.Restaurant as DataRow;
+    var restaurantId = (int) restaurant!["RestaurantID"];
+    var planType     = restaurant["PlanType"].ToString()!;
+    var allows3D     = Convert.ToBoolean(restaurant["Allows3DModels"]);
+    var maxDishes    = Convert.ToInt32(restaurant["MaxDishes"]);
+    var dishCount = ViewBag.DishCount != null ? (int)ViewBag.DishCount : 0;
+    var limitDisplay = maxDishes >= 999999 ? "Unlimited" : maxDishes.ToString();
+
+    ViewData["Title"]      = $"Add Dish — {restaurant["RestaurantName"]}";
+    ViewData["ActivePage"] = "Restaurants";
+}
+
+@section Styles {
+<style>
+    .page-heading    { font-size: 1.3rem; font-weight: 700; color: #0f172a; }
+    .page-subheading { font-size: 0.82rem; color: #94a3b8; margin-top: 2px; }
+
+    /* ── Form card ──────────────────────────────────────────────────── */
+    .form-card {
+        background: #fff;
+        border-radius: 14px;
+        border: 1px solid #f1f5f9;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+        overflow: hidden;
+    }
+    .form-card-header {
+        padding: 15px 22px 13px;
+        border-bottom: 1px solid #f1f5f9;
+        font-size: 0.88rem; font-weight: 700; color: #0f172a;
+    }
+    .form-card-header i { color: #1d4ed8; margin-right: 6px; }
+    .form-card-body { padding: 22px; }
+
+    .form-section-label {
+        font-size: 0.68rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.08em;
+        color: #94a3b8; margin-bottom: 14px; padding-bottom: 8px;
+        border-bottom: 1px solid #f1f5f9;
+    }
+
+    /* ── Inputs ─────────────────────────────────────────────────────── */
+    .form-label {
+        font-size: 0.82rem; font-weight: 600; color: #374151; margin-bottom: 5px;
+    }
+    .required-star { color: #ef4444; margin-left: 2px; }
+
+    .form-control, .form-select {
+        border-radius: 9px; border: 1.5px solid #e2e8f0;
+        padding: 0.6rem 0.85rem;
+        font-size: 0.9rem; color: #1e293b;
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .form-control:focus, .form-select:focus {
+        border-color: #1d4ed8;
+        box-shadow: 0 0 0 3px rgba(29,78,216,0.10);
+        outline: none;
+    }
+    .form-hint { font-size: 0.73rem; color: #94a3b8; margin-top: 4px; }
+    .invalid-feedback { font-size: 0.77rem; }
+
+    /* ── Content type radio cards ───────────────────────────────────── */
+    .content-type-options { display: flex; gap: 12px; flex-wrap: wrap; }
+
+    .content-type-option {
+        flex: 1; min-width: 140px;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 10px; padding: 14px 16px;
+        cursor: pointer; transition: border-color 0.15s, background 0.15s;
+        display: flex; align-items: center; gap: 12px;
+    }
+    .content-type-option:has(input:checked) {
+        border-color: #1d4ed8; background: #eff6ff;
+    }
+    .content-type-option.disabled-option {
+        opacity: 0.45; cursor: not-allowed;
+        background: #f8fafc !important;
+        border-color: #e2e8f0 !important;
+    }
+    .content-type-option input[type="radio"] {
+        accent-color: #1d4ed8; width: 16px; height: 16px; flex-shrink: 0;
+    }
+    .content-type-icon {
+        width: 36px; height: 36px; border-radius: 8px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.1rem; flex-shrink: 0;
+    }
+    .ct-video { background: #dbeafe; color: #1e40af; }
+    .ct-3d    { background: #ede9fe; color: #5b21b6; }
+    .content-type-text .ct-name  { font-size: 0.85rem; font-weight: 700; color: #0f172a; }
+    .content-type-text .ct-desc  { font-size: 0.72rem; color: #64748b; margin-top: 1px; }
+    .plan-block-chip {
+        font-size: 0.68rem; font-weight: 600;
+        padding: 2px 8px; border-radius: 20px;
+        background: #fef3c7; color: #92400e;
+        border: 1px solid #fde68a; margin-top: 4px;
+        display: inline-block;
+    }
+
+    /* ── File upload zone ───────────────────────────────────────────── */
+    .file-upload-zone {
+        border: 2px dashed #cbd5e1;
+        border-radius: 10px; padding: 24px 16px;
+        text-align: center; cursor: pointer;
+        transition: border-color 0.2s, background 0.2s;
+        position: relative;
+    }
+    .file-upload-zone:hover {
+        border-color: #1d4ed8; background: #f8faff;
+    }
+    .file-upload-zone.has-file {
+        border-color: #16a34a; background: #f0fdf4;
+    }
+    .file-upload-zone input[type="file"] {
+        position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%;
+    }
+    .file-upload-icon { font-size: 1.6rem; color: #94a3b8; margin-bottom: 6px; }
+    .file-upload-text { font-size: 0.82rem; color: #64748b; }
+    .file-upload-text strong { color: #1d4ed8; }
+    .file-name-display {
+        font-size: 0.78rem; color: #16a34a; font-weight: 600; margin-top: 6px;
+    }
+
+    /* ── Restaurant info chip ───────────────────────────────────────── */
+    .restaurant-chip {
+        display: flex; align-items: center; gap: 12px;
+        background: #f8fafc; border: 1px solid #e2e8f0;
+        border-radius: 10px; padding: 12px 16px;
+        margin-bottom: 20px;
+    }
+    .restaurant-chip-icon {
+        width: 38px; height: 38px; border-radius: 9px;
+        background: linear-gradient(135deg, #1d4ed8, #6366f1);
+        display: flex; align-items: center; justify-content: center;
+        color: #fff; font-size: 1rem; flex-shrink: 0;
+    }
+    .chip-name  { font-size: 0.88rem; font-weight: 700; color: #0f172a; }
+    .chip-meta  { font-size: 0.75rem; color: #64748b; margin-top: 1px; }
+
+    .badge-plan {
+        font-size: 0.68rem; font-weight: 700; padding: 2px 8px; border-radius: 4px;
+    }
+    .badge-plan.basic      { background: #f1f5f9; color: #475569; }
+    .badge-plan.pro        { background: #ede9fe; color: #6d28d9; }
+    .badge-plan.enterprise { background: #dbeafe; color: #1d4ed8; }
+
+    /* ── Buttons ────────────────────────────────────────────────────── */
+    .btn-submit {
+        background: linear-gradient(135deg, #1d4ed8, #6366f1);
+        border: none; border-radius: 10px; color: #fff;
+        font-weight: 600; font-size: 0.95rem;
+        padding: 0.7rem 2rem; cursor: pointer;
+        transition: opacity 0.2s, transform 0.1s;
+        display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn-submit:hover  { opacity: 0.9; }
+    .btn-submit:active { transform: scale(0.98); }
+
+    .btn-cancel {
+        background: #f1f5f9; border: none; border-radius: 10px;
+        color: #475569; font-weight: 600; font-size: 0.95rem;
+        padding: 0.7rem 1.5rem; cursor: pointer; text-decoration: none;
+        display: inline-flex; align-items: center; gap: 6px;
+        transition: background 0.15s;
+    }
+    .btn-cancel:hover { background: #e2e8f0; color: #1e293b; }
+
+    /* ── Error alert ────────────────────────────────────────────────── */
+    .alert-error {
+        background: #fef2f2; border: 1.5px solid #fecaca;
+        border-radius: 10px; color: #b91c1c;
+        font-size: 0.875rem; padding: 12px 16px; margin-bottom: 20px;
+    }
+
+    /* ── Veg checkbox ───────────────────────────────────────────────── */
+    .veg-checkbox-wrap {
+        display: flex; align-items: center; gap: 10px;
+        background: #f8fafc; border: 1.5px solid #e2e8f0;
+        border-radius: 9px; padding: 12px 14px; cursor: pointer;
+    }
+    .veg-checkbox-wrap input { accent-color: #16a34a; width: 17px; height: 17px; }
+    .veg-checkbox-label { font-size: 0.88rem; font-weight: 600; color: #374151; }
+    .veg-checkbox-sub   { font-size: 0.73rem; color: #94a3b8; }
+</style>
+}
+
+<!-- ── Page heading ──────────────────────────────────────────────────────── -->
+<div class="mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
+    <div>
+        <div class="page-heading">Add Dish</div>
+        <div class="page-subheading">Upload dish content and details to the AR menu.</div>
+    </div>
+    <a href="/Admin/Dishes/@restaurantId" class="btn-cancel">
+        <i class="bi bi-arrow-left"></i> Back to Dishes
+    </a>
+</div>
+
+<!-- ── Restaurant info chip ──────────────────────────────────────────────── -->
+<div class="restaurant-chip">
+    <div class="restaurant-chip-icon"><i class="bi bi-shop"></i></div>
+    <div>
+        <div class="chip-name">
+            @restaurant["RestaurantName"]
+            <span class="badge-plan @planType.ToLower()" style="margin-left:6px; vertical-align:middle;">@planType</span>
+        </div>
+        <div class="chip-meta">
+            @dishCount active @(dishCount == 1 ? "dish" : "dishes") &nbsp;·&nbsp;
+            Limit: @limitDisplay
+            @if (!allows3D)
+            {
+                <span class="plan-block-chip" style="margin-left:6px;">3D models not available on this plan</span>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- ── Error ─────────────────────────────────────────────────────────────── -->
+@if (!string.IsNullOrEmpty(ViewBag.Error as string))
+{
+    <div class="alert-error">
+        <i class="bi bi-exclamation-circle-fill me-2"></i>@ViewBag.Error
+    </div>
+}
+
+<!-- ── Form ──────────────────────────────────────────────────────────────── -->
+<!--
+    enctype="multipart/form-data" is required for file uploads.
+    Without it the file bytes are never sent to the server.
+-->
+<form method="post" action="/Admin/AddDish"
+      id="addDishForm"
+      enctype="multipart/form-data"
+      novalidate>
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="restaurantId" value="@restaurantId" />
+
+    <div class="row g-4">
+
+        <!-- ── Left column ──────────────────────────────────────────── -->
+        <div class="col-lg-7">
+
+            <!-- Dish Details -->
+            <div class="form-card mb-4">
+                <div class="form-card-header">
+                    <i class="bi bi-card-text"></i>Dish Details
+                </div>
+                <div class="form-card-body">
+                    <div class="form-section-label">Basic Information</div>
+
+                    <div class="mb-3">
+                        <label class="form-label" for="dishName">
+                            Dish Name<span class="required-star">*</span>
+                        </label>
+                        <input type="text" class="form-control" id="dishName" name="dishName"
+                               placeholder="e.g. Paneer Tikka"
+                               maxlength="200" required />
+                        <div class="invalid-feedback">Dish name is required.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" for="description">Description</label>
+                        <textarea class="form-control" id="description" name="description"
+                                  rows="3" maxlength="2000"
+                                  placeholder="Describe the dish, ingredients, or preparation..."></textarea>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-sm-6">
+                            <label class="form-label" for="category">
+                                Category<span class="required-star">*</span>
+                            </label>
+                            <select class="form-select" id="category" name="category" required>
+                                <option value="" disabled selected>Select category</option>
+                                <option value="Starter">Starter</option>
+                                <option value="Main Course">Main Course</option>
+                                <option value="Bread">Bread</option>
+                                <option value="Dessert">Dessert</option>
+                                <option value="Drink">Drink</option>
+                                <option value="Special">Special</option>
+                            </select>
+                            <div class="invalid-feedback">Please select a category.</div>
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label" for="spiceLevel">
+                                Spice Level<span class="required-star">*</span>
+                            </label>
+                            <select class="form-select" id="spiceLevel" name="spiceLevel" required>
+                                <option value="" disabled selected>Select level</option>
+                                <option value="None">None</option>
+                                <option value="Mild">Mild</option>
+                                <option value="Medium">Medium</option>
+                                <option value="Hot">Hot</option>
+                            </select>
+                            <div class="invalid-feedback">Please select a spice level.</div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mt-1">
+                        <div class="col-sm-6">
+                            <label class="form-label" for="price">
+                                Price (₹)<span class="required-star">*</span>
+                            </label>
+                            <input type="number" class="form-control" id="price" name="price"
+                                   min="0" step="0.01" placeholder="0.00" required />
+                            <div class="invalid-feedback">Please enter a valid price.</div>
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label" for="displayOrder">Display Order</label>
+                            <input type="number" class="form-control" id="displayOrder"
+                                   name="displayOrder" min="0" value="0" />
+                            <div class="form-hint">Lower number appears first in the menu.</div>
+                        </div>
+                    </div>
+
+                    <div class="mt-3">
+                        <label class="veg-checkbox-wrap" for="isVegetarian">
+                            <input type="checkbox" id="isVegetarian" name="isVegetarian" value="true" />
+                            <div>
+                                <div class="veg-checkbox-label">
+                                    <span style="color:#16a34a;">🟢</span> Vegetarian Dish
+                                </div>
+                                <div class="veg-checkbox-sub">Check if this dish contains no meat or fish</div>
+                            </div>
+                        </label>
+                        <!-- Hidden field so unchecked = false is still sent in the form POST -->
+                        <input type="hidden" name="isVegetarian" value="false" />
+                    </div>
+                </div>
+            </div>
+
+            <!-- AR Content -->
+            <div class="form-card">
+                <div class="form-card-header">
+                    <i class="bi bi-badge-ar"></i>AR Content
+                </div>
+                <div class="form-card-body">
+                    <div class="form-section-label">Content Type<span class="required-star">*</span></div>
+
+                    <div class="content-type-options mb-4">
+                        <!-- Video option — always enabled -->
+                        <label class="content-type-option" for="ctVideo">
+                            <input type="radio" id="ctVideo" name="contentType"
+                                   value="Video" checked required
+                                   onchange="handleContentTypeChange(this.value)" />
+                            <div class="content-type-icon ct-video">
+                                <i class="bi bi-camera-video-fill"></i>
+                            </div>
+                            <div class="content-type-text">
+                                <div class="ct-name">Video AR</div>
+                                <div class="ct-desc">MP4 video overlay<br/>All plans</div>
+                            </div>
+                        </label>
+
+                        <!-- 3D Model option — disabled on Basic plan -->
+                        <label class="content-type-option @(!allows3D ? "disabled-option" : "")"
+                               for="ct3D"
+                               title="@(!allows3D ? $"3D models require Pro or Enterprise plan" : "")">
+                            <input type="radio" id="ct3D" name="contentType"
+                                   value="3DModel"
+                                   @(!allows3D ? "disabled" : "")
+                                   onchange="handleContentTypeChange(this.value)" />
+                            <div class="content-type-icon ct-3d">
+                                <i class="bi bi-box"></i>
+                            </div>
+                            <div class="content-type-text">
+                                <div class="ct-name">3D Model AR</div>
+                                <div class="ct-desc">GLB/GLTF on table surface</div>
+                                @if (!allows3D)
+                                {
+                                    <span class="plan-block-chip">Pro / Enterprise only</span>
+                                }
+                            </div>
+                        </label>
+                    </div>
+
+                    <!-- Content file upload -->
+                    <div class="mb-4">
+                        <label class="form-label" id="contentFileLabel">
+                            Video File (MP4)<span class="required-star">*</span>
+                        </label>
+                        <div class="file-upload-zone" id="contentZone">
+                            <input type="file" id="contentFile" name="contentFile"
+                                   accept=".mp4"
+                                   onchange="handleFileSelect(this, 'contentZone', 'contentFileName')"
+                                   required />
+                            <div class="file-upload-icon"><i class="bi bi-cloud-arrow-up"></i></div>
+                            <div class="file-upload-text">
+                                <strong>Click to upload</strong> or drag and drop
+                            </div>
+                            <div class="file-upload-text mt-1" id="contentAcceptHint">MP4 files only</div>
+                            <div class="file-name-display" id="contentFileName"></div>
+                        </div>
+                        <div class="form-hint">
+                            This is the AR content shown when a customer taps the dish.
+                            Recommended: under 50MB for fast loading on mobile.
+                        </div>
+                    </div>
+
+                    <!-- Thumbnail upload -->
+                    <div>
+                        <label class="form-label">Thumbnail Image</label>
+                        <div class="file-upload-zone" id="thumbZone">
+                            <input type="file" id="thumbnailFile" name="thumbnailFile"
+                                   accept=".jpg,.jpeg,.png,.webp"
+                                   onchange="handleFileSelect(this, 'thumbZone', 'thumbFileName')" />
+                            <div class="file-upload-icon"><i class="bi bi-image"></i></div>
+                            <div class="file-upload-text">
+                                <strong>Click to upload</strong> or drag and drop
+                            </div>
+                            <div class="file-upload-text mt-1">JPG, PNG or WEBP</div>
+                            <div class="file-name-display" id="thumbFileName"></div>
+                        </div>
+                        <div class="form-hint">Shown in the dish list before the AR experience loads. Recommended: 400×400px.</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ── Right column: summary panel ─────────────────────────── -->
+        <div class="col-lg-5">
+            <div class="form-card" style="position: sticky; top: 80px;">
+                <div class="form-card-header">
+                    <i class="bi bi-info-circle"></i>Summary
+                </div>
+                <div class="form-card-body">
+                    <div style="font-size:0.8rem; color:#475569; line-height:1.8;">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Restaurant</span>
+                            <span style="font-weight:600; color:#0f172a; text-align:right; max-width:160px;">@restaurant["RestaurantName"]</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Plan</span>
+                            <span class="badge-plan @planType.ToLower()">@planType</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Active dishes</span>
+                            <span style="font-weight:600; color:#0f172a;">@dishCount / @limitDisplay</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>3D Models</span>
+                            <span style="font-weight:600; color:@(allows3D ? "#16a34a" : "#dc2626")">
+                                @(allows3D ? "✓ Allowed" : "✗ Not available")
+                            </span>
+                        </div>
+                    </div>
+
+                    <hr style="border-color:#f1f5f9; margin:14px 0;" />
+
+                    <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:9px; padding:12px 14px; font-size:0.78rem; color:#92400e;">
+                        <i class="bi bi-lightbulb-fill me-1"></i>
+                        <strong>Tip:</strong> New dishes are automatically set to <strong>Active</strong>.
+                        You can deactivate them from the dish list at any time.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ── Submit buttons ────────────────────────────────────────────── -->
+    <div class="d-flex gap-3 mt-4 flex-wrap">
+        <button type="submit" class="btn-submit">
+            <i class="bi bi-check-lg"></i> Save Dish
+        </button>
+        <a href="/Admin/Dishes/@restaurantId" class="btn-cancel">
+            <i class="bi bi-x-lg"></i> Cancel
+        </a>
+    </div>
+
+</form>
+
+@section Scripts {
+<script>
+    // ── Content type change handler ─────────────────────────────────────────
+    // Updates the file input accept attribute and label when switching
+    // between Video and 3D Model.
+    function handleContentTypeChange(value) {
+        const input      = document.getElementById('contentFile');
+        const label      = document.getElementById('contentFileLabel');
+        const hint       = document.getElementById('contentAcceptHint');
+        const zone       = document.getElementById('contentZone');
+        const nameEl     = document.getElementById('contentFileName');
+
+        // Reset any previously selected file display
+        nameEl.textContent = '';
+        zone.classList.remove('has-file');
+
+        if (value === '3DModel') {
+            input.accept     = '.glb,.gltf';
+            label.innerHTML  = '3D Model File (GLB / GLTF)<span style="color:#ef4444;margin-left:2px;">*</span>';
+            hint.textContent = '.glb or .gltf files only';
+        } else {
+            input.accept     = '.mp4';
+            label.innerHTML  = 'Video File (MP4)<span style="color:#ef4444;margin-left:2px;">*</span>';
+            hint.textContent = 'MP4 files only';
+        }
+
+        // Clear the input value so the old file is not re-submitted
+        input.value = '';
+    }
+
+    // ── File select display handler ─────────────────────────────────────────
+    // Shows selected filename inside the upload zone.
+    function handleFileSelect(input, zoneId, nameElId) {
+        const zone   = document.getElementById(zoneId);
+        const nameEl = document.getElementById(nameElId);
+
+        if (input.files && input.files[0]) {
+            const file = input.files[0];
+            const size = (file.size / (1024 * 1024)).toFixed(1);
+            nameEl.textContent = `✓ ${file.name} (${size} MB)`;
+            zone.classList.add('has-file');
+        } else {
+            nameEl.textContent = '';
+            zone.classList.remove('has-file');
+        }
+    }
+
+    // ── Form validation ─────────────────────────────────────────────────────
+    (function () {
+        const form = document.getElementById('addDishForm');
+
+        form.addEventListener('submit', function (e) {
+            if (!form.checkValidity()) {
+                e.preventDefault();
+                e.stopPropagation();
+                form.classList.add('was-validated');
+
+                const firstInvalid = form.querySelector(':invalid');
+                if (firstInvalid) firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        });
+    })();
+</script>
+}

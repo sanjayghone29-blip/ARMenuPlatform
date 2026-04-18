@@ -5,6 +5,11 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddControllersWithViews();
 builder.Services.AddScoped<DbHelper>();
+builder.Services.AddScoped<AzureBlobHelper>();
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = 524_288_000;
+});
 builder.Services.AddDistributedMemoryCache();  // In-memory session store (single server)
 
 builder.Services.AddSession(options =>
