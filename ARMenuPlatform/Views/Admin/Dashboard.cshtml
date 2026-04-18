@@ -1,0 +1,479 @@
+﻿@using System.Data
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"]      = "Dashboard";
+    ViewData["ActivePage"] = "Dashboard";
+
+    var restaurants = ViewBag.Restaurants as DataTable;
+
+    // Pre-compute trial-expiring-soon flag threshold
+    var warningThreshold = DateTime.UtcNow.Date.AddDays(3);
+}
+
+@section Styles {
+<style>
+    /* ── Stat cards ─────────────────────────────────────────────────── */
+    .stat-card {
+        background: #ffffff;
+        border-radius: 14px;
+        padding: 22px 24px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.04);
+        border: 1px solid #f1f5f9;
+        transition: box-shadow 0.2s;
+    }
+
+    .stat-card:hover {
+        box-shadow: 0 4px 16px rgba(0,0,0,0.10);
+    }
+
+    .stat-icon {
+        width: 52px; height: 52px;
+        border-radius: 12px;
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+        font-size: 1.4rem;
+    }
+
+    .stat-icon.green  { background: #dcfce7; color: #16a34a; }
+    .stat-icon.yellow { background: #fef9c3; color: #ca8a04; }
+    .stat-icon.red    { background: #fee2e2; color: #dc2626; }
+    .stat-icon.blue   { background: #dbeafe; color: #2563eb; }
+
+    .stat-value {
+        font-size: 1.9rem;
+        font-weight: 700;
+        color: #0f172a;
+        line-height: 1;
+    }
+
+    .stat-label {
+        font-size: 0.8rem;
+        color: #64748b;
+        font-weight: 500;
+        margin-top: 3px;
+    }
+
+    /* ── Section card ───────────────────────────────────────────────── */
+    .section-card {
+        background: #ffffff;
+        border-radius: 14px;
+        border: 1px solid #f1f5f9;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+        overflow: hidden;
+    }
+
+    .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 18px 22px 14px;
+        border-bottom: 1px solid #f1f5f9;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .section-title {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: #0f172a;
+    }
+
+    /* ── Filter buttons ─────────────────────────────────────────────── */
+    .filter-btn {
+        font-size: 0.78rem;
+        font-weight: 600;
+        padding: 5px 14px;
+        border-radius: 20px;
+        border: 1.5px solid #e2e8f0;
+        background: #fff;
+        color: #475569;
+        cursor: pointer;
+        transition: all 0.15s;
+        white-space: nowrap;
+    }
+
+    .filter-btn:hover,
+    .filter-btn.active {
+        background: #1d4ed8;
+        border-color: #1d4ed8;
+        color: #fff;
+    }
+
+    /* ── Table ──────────────────────────────────────────────────────── */
+    .restaurants-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.875rem;
+    }
+
+    .restaurants-table thead th {
+        background: #f8fafc;
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #64748b;
+        padding: 11px 16px;
+        text-align: left;
+        border-bottom: 1px solid #e2e8f0;
+        white-space: nowrap;
+    }
+
+    .restaurants-table tbody tr {
+        border-bottom: 1px solid #f1f5f9;
+        transition: background 0.12s;
+    }
+
+    .restaurants-table tbody tr:hover { background: #f8fafc; }
+    .restaurants-table tbody tr:last-child { border-bottom: none; }
+
+    .restaurants-table td {
+        padding: 13px 16px;
+        color: #334155;
+        vertical-align: middle;
+    }
+
+    /* trial-expiring-soon row highlight */
+    .row-warning {
+        background: #fffbeb !important;
+    }
+
+    .row-warning:hover {
+        background: #fef3c7 !important;
+    }
+
+    /* ── Badges ─────────────────────────────────────────────────────── */
+    .badge-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        padding: 4px 10px;
+        border-radius: 20px;
+        white-space: nowrap;
+    }
+
+    .badge-status.active  { background: #dcfce7; color: #15803d; }
+    .badge-status.trial   { background: #fef9c3; color: #92400e; }
+    .badge-status.paused  { background: #fee2e2; color: #b91c1c; }
+    .badge-status.cancelled { background: #f1f5f9; color: #475569; }
+
+    .badge-plan {
+        font-size: 0.7rem;
+        font-weight: 700;
+        padding: 3px 9px;
+        border-radius: 5px;
+        letter-spacing: 0.03em;
+        white-space: nowrap;
+    }
+
+    .badge-plan.basic      { background: #f1f5f9; color: #475569; }
+    .badge-plan.pro        { background: #ede9fe; color: #6d28d9; }
+    .badge-plan.enterprise { background: #dbeafe; color: #1d4ed8; }
+
+    /* ── Trial warning badge ────────────────────────────────────────── */
+    .trial-warning-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.68rem;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 20px;
+        background: #fef3c7;
+        color: #92400e;
+        border: 1px solid #fde68a;
+        margin-left: 6px;
+    }
+
+    /* ── Action buttons ─────────────────────────────────────────────── */
+    .btn-action {
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 5px 11px;
+        border-radius: 7px;
+        border: none;
+        cursor: pointer;
+        transition: opacity 0.15s;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        white-space: nowrap;
+    }
+
+    .btn-action:hover { opacity: 0.82; }
+
+    .btn-view     { background: #f1f5f9; color: #334155; }
+    .btn-pause    { background: #fef9c3; color: #92400e; }
+    .btn-activate { background: #dcfce7; color: #15803d; }
+
+    /* ── Empty state ────────────────────────────────────────────────── */
+    .empty-state {
+        text-align: center;
+        padding: 56px 20px;
+        color: #94a3b8;
+    }
+
+    .empty-state i {
+        font-size: 2.5rem;
+        margin-bottom: 12px;
+        display: block;
+    }
+
+    /* ── Page heading ───────────────────────────────────────────────── */
+    .page-heading {
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: #0f172a;
+    }
+
+    .page-subheading {
+        font-size: 0.82rem;
+        color: #94a3b8;
+        margin-top: 2px;
+    }
+
+    /* ── Responsive table scroll ────────────────────────────────────── */
+    .table-scroll { overflow-x: auto; }
+</style>
+}
+
+<!-- ── Page heading ──────────────────────────────────────────────────────── -->
+<div class="mb-4">
+    <div class="page-heading">Welcome back, @ViewBag.FullName 👋</div>
+    <div class="page-subheading">Here's what's happening on your platform today.</div>
+</div>
+
+<!-- ── Stat cards ─────────────────────────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+
+    <div class="col-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon green"><i class="bi bi-shop-window"></i></div>
+            <div>
+                <div class="stat-value">@ViewBag.ActiveCount</div>
+                <div class="stat-label">Active Restaurants</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon yellow"><i class="bi bi-hourglass-split"></i></div>
+            <div>
+                <div class="stat-value">@ViewBag.TrialCount</div>
+                <div class="stat-label">Trial Restaurants</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon red"><i class="bi bi-pause-circle"></i></div>
+            <div>
+                <div class="stat-value">@ViewBag.PausedCount</div>
+                <div class="stat-label">Paused Restaurants</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon blue"><i class="bi bi-qr-code-scan"></i></div>
+            <div>
+                <div class="stat-value">@ViewBag.ScansToday</div>
+                <div class="stat-label">QR Scans Today</div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ── Restaurants table card ────────────────────────────────────────────── -->
+<div class="section-card">
+
+    <div class="section-header">
+        <div class="section-title">
+            <i class="bi bi-shop me-2 text-primary"></i>All Restaurants
+        </div>
+
+        <!-- Filter buttons — JS filters the table rows, no page reload -->
+        <div class="d-flex gap-2 flex-wrap">
+            <button class="filter-btn active" onclick="filterTable('All',   this)">All</button>
+            <button class="filter-btn"        onclick="filterTable('Active', this)">Active</button>
+            <button class="filter-btn"        onclick="filterTable('Trial',  this)">Trial</button>
+            <button class="filter-btn"        onclick="filterTable('Paused', this)">Paused</button>
+        </div>
+    </div>
+
+    <div class="table-scroll">
+        @if (restaurants != null && restaurants.Rows.Count > 0)
+        {
+            <table class="restaurants-table" id="restaurantsTable">
+                <thead>
+                    <tr>
+                        <th>Restaurant</th>
+                        <th>Owner Phone</th>
+                        <th>City</th>
+                        <th>Plan</th>
+                        <th>Status</th>
+                        <th>Scans This Month</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (DataRow row in restaurants.Rows)
+                    {
+                        var status       = row["Status"].ToString()!;
+                        var plan         = row["PlanType"].ToString()!;
+                        var restId       = row["RestaurantID"].ToString();
+                        var restaurantName = row["RestaurantName"].ToString();
+
+                        // Trial expiry warning
+                        bool isExpiringSoon = false;
+                        string expiryLabel  = "";
+                        if (row["TrialEndDate"] != DBNull.Value)
+                        {
+                            var trialEnd   = Convert.ToDateTime(row["TrialEndDate"]).Date;
+                            var daysLeft   = (trialEnd - DateTime.UtcNow.Date).Days;
+                            isExpiringSoon = status == "Trial" && trialEnd <= warningThreshold;
+                            if (isExpiringSoon)
+                                expiryLabel = daysLeft <= 0 ? "Expired" : $"Expires in {daysLeft}d";
+                        }
+
+                        <!-- data-status used by the JS filter -->
+                        <tr class="@(isExpiringSoon ? "row-warning" : "")" data-status="@status">
+                            <td>
+                                <div style="font-weight:600; color:#0f172a;">@restaurantName</div>
+                                <div style="font-size:0.75rem; color:#94a3b8;">@row["OwnerName"]</div>
+                                @if (isExpiringSoon)
+                                {
+                                    <span class="trial-warning-chip">
+                                        <i class="bi bi-exclamation-triangle-fill"></i> @expiryLabel
+                                    </span>
+                                }
+                            </td>
+                            <td>@row["OwnerPhone"]</td>
+                            <td>@(row["City"] == DBNull.Value ? "—" : row["City"].ToString())</td>
+                            <td>
+                                <span class="badge-plan @plan.ToLower()">@plan</span>
+                            </td>
+                            <td>
+                                @{
+                                    var statusClass = status.ToLower();
+                                    var statusDot   = status switch {
+                                        "Active"    => "bi-circle-fill",
+                                        "Trial"     => "bi-clock-fill",
+                                        "Paused"    => "bi-pause-circle-fill",
+                                        "Cancelled" => "bi-x-circle-fill",
+                                        _           => "bi-circle"
+                                    };
+                                }
+                                <span class="badge-status @statusClass">
+                                    <i class="bi @statusDot" style="font-size:0.55rem;"></i>
+                                    @status
+                                </span>
+                            </td>
+                            <td>
+                                <span style="font-weight:600;">@row["ScansThisMonth"]</span>
+                            </td>
+                            <td>
+                                <div class="d-flex gap-1 flex-wrap">
+                                    <!-- View (GET — no CSRF needed) -->
+                                    <a href="/Admin/ViewRestaurant/@restId" class="btn-action btn-view">
+                                        <i class="bi bi-eye"></i> View
+                                    </a>
+
+                                    <!-- Pause (POST — requires CSRF token) -->
+                                    @if (status != "Paused" && status != "Cancelled")
+                                    {
+                                        <form method="post" action="/Admin/PauseRestaurant"
+                                              style="display:inline"
+                                              onsubmit="return confirm('Pause @restaurantName? All QR codes will stop working.')">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="restaurantId" value="@restId" />
+                                            <button type="submit" class="btn-action btn-pause">
+                                                <i class="bi bi-pause-fill"></i> Pause
+                                            </button>
+                                        </form>
+                                    }
+
+                                    <!-- Activate (POST — requires CSRF token) -->
+                                    @if (status == "Paused" || status == "Trial")
+                                    {
+                                        <form method="post" action="/Admin/ActivateRestaurant"
+                                              style="display:inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="restaurantId" value="@restId" />
+                                            <button type="submit" class="btn-action btn-activate">
+                                                <i class="bi bi-check-circle"></i> Activate
+                                            </button>
+                                        </form>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        else
+        {
+            <div class="empty-state">
+                <i class="bi bi-shop"></i>
+                <div style="font-weight:600; color:#475569;">No restaurants yet</div>
+                <div style="font-size:0.82rem; margin-top:4px;">
+                    Add your first restaurant to get started.
+                </div>
+                <a href="/Admin/AddRestaurant"
+                   class="btn-action btn-activate mt-3"
+                   style="display:inline-flex; margin:auto;">
+                    <i class="bi bi-plus-circle"></i> Add Restaurant
+                </a>
+            </div>
+        }
+    </div>
+
+    <!-- Row count footer -->
+    @if (restaurants != null && restaurants.Rows.Count > 0)
+    {
+        <div style="padding:12px 20px; border-top:1px solid #f1f5f9;
+                    font-size:0.78rem; color:#94a3b8;">
+            Showing <span id="visibleCount">@restaurants.Rows.Count</span>
+            of @restaurants.Rows.Count restaurants
+        </div>
+    }
+
+</div>
+
+@section Scripts {
+<script>
+    // ── Table filter ────────────────────────────────────────────────────────
+    // Reads data-status attribute on each <tr> and toggles visibility.
+    // No AJAX — instant, works offline.
+    function filterTable(status, btn) {
+        // Update active button style
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        const rows    = document.querySelectorAll('#restaurantsTable tbody tr');
+        let   visible = 0;
+
+        rows.forEach(row => {
+            const rowStatus = row.getAttribute('data-status');
+            const show      = status === 'All' || rowStatus === status;
+            row.style.display = show ? '' : 'none';
+            if (show) visible++;
+        });
+
+        // Update the footer count
+        const countEl = document.getElementById('visibleCount');
+        if (countEl) countEl.textContent = visible;
+    }
+</script>
+}
