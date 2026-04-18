@@ -210,7 +210,7 @@
                        placeholder="you@example.com"
                        required
                        autofocus
-                    value="@(Context.Request.Method == "POST" ? Context.Request.Form["email"].ToString() : "")"
+                    value="@(Context.Request.Method == "POST" ? Context.Request.Form["email"].ToString() : "")"/>
             </div>
 
             <!-- Password with show/hide toggle -->
