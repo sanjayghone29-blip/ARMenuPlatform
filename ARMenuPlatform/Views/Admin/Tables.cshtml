@@ -1,0 +1,323 @@
+﻿@using System.Data
+@{
+    Layout = "_AdminLayout";
+    var restaurant    = ViewBag.Restaurant   as DataRow;
+    var tables        = ViewBag.Tables       as DataTable;
+    var restaurantId  = Convert.ToInt32(restaurant!["RestaurantID"]);
+    var totalTables   = Convert.ToInt32(restaurant["TotalTables"]);
+    var baseUrl       = ViewBag.ArMenuBaseUrl as string ?? "";
+
+    ViewData["Title"]      = $"QR Codes — {restaurant["RestaurantName"]}";
+    ViewData["ActivePage"] = "Restaurants";
+}
+
+@section Styles {
+<style>
+    .page-heading    { font-size: 1.3rem; font-weight: 700; color: #0f172a; }
+    .page-subheading { font-size: 0.82rem; color: #94a3b8; margin-top: 2px; }
+
+    /* ── Info bar ───────────────────────────────────────────────────── */
+    .info-bar {
+        display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 22px;
+    }
+    .info-chip {
+        display: flex; align-items: center; gap: 8px;
+        background: #fff; border: 1px solid #e2e8f0;
+        border-radius: 10px; padding: 10px 16px;
+        font-size: 0.82rem; color: #475569;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .info-chip i    { color: #1d4ed8; font-size: 1rem; }
+    .info-chip strong { color: #0f172a; }
+
+    /* ── Alerts ─────────────────────────────────────────────────────── */
+    .alert-success {
+        background: #f0fdf4; border: 1.5px solid #86efac;
+        border-radius: 10px; color: #15803d;
+        padding: 12px 16px; font-size: 0.875rem; margin-bottom: 18px;
+    }
+    .alert-error {
+        background: #fef2f2; border: 1.5px solid #fecaca;
+        border-radius: 10px; color: #b91c1c;
+        padding: 12px 16px; font-size: 0.875rem; margin-bottom: 18px;
+    }
+
+    /* ── Action buttons ─────────────────────────────────────────────── */
+    .btn-primary-action {
+        background: linear-gradient(135deg, #1d4ed8, #6366f1);
+        border: none; border-radius: 9px; color: #fff;
+        font-weight: 600; font-size: 0.875rem;
+        padding: 9px 20px; cursor: pointer; text-decoration: none;
+        display: inline-flex; align-items: center; gap: 7px;
+        transition: opacity 0.15s;
+    }
+    .btn-primary-action:hover { opacity: 0.9; color: #fff; }
+
+    .btn-secondary-action {
+        background: #f1f5f9; border: none; border-radius: 9px;
+        color: #475569; font-weight: 600; font-size: 0.875rem;
+        padding: 9px 18px; cursor: pointer; text-decoration: none;
+        display: inline-flex; align-items: center; gap: 7px;
+        transition: background 0.15s;
+    }
+    .btn-secondary-action:hover { background: #e2e8f0; color: #1e293b; }
+
+    .btn-back {
+        background: #f1f5f9; border: none; border-radius: 9px;
+        color: #475569; font-weight: 600; font-size: 0.875rem;
+        padding: 9px 16px; text-decoration: none;
+        display: inline-flex; align-items: center; gap: 6px;
+        transition: background 0.15s;
+    }
+    .btn-back:hover { background: #e2e8f0; color: #1e293b; }
+
+    /* ── QR card grid ───────────────────────────────────────────────── */
+    .qr-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 18px;
+        margin-top: 22px;
+    }
+
+    .qr-card {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 20px 16px 16px;
+        display: flex; flex-direction: column; align-items: center;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        transition: box-shadow 0.2s, transform 0.15s;
+        text-align: center;
+    }
+    .qr-card:hover {
+        box-shadow: 0 6px 20px rgba(0,0,0,0.10);
+        transform: translateY(-2px);
+    }
+
+    /* Table number badge */
+    .table-badge {
+        font-size: 0.7rem; font-weight: 800;
+        text-transform: uppercase; letter-spacing: 0.07em;
+        color: #1d4ed8; background: #dbeafe;
+        padding: 3px 10px; border-radius: 20px;
+        margin-bottom: 12px;
+    }
+
+    /* QR image */
+    .qr-image {
+        width: 160px; height: 160px;
+        border-radius: 10px;
+        border: 1px solid #f1f5f9;
+        object-fit: contain;
+        background: #f8fafc;
+    }
+
+    /* Placeholder when no QR image yet */
+    .qr-placeholder {
+        width: 160px; height: 160px;
+        border-radius: 10px;
+        background: #f8fafc;
+        border: 2px dashed #e2e8f0;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        color: #cbd5e1; gap: 6px;
+        font-size: 0.72rem;
+    }
+    .qr-placeholder i { font-size: 2rem; }
+
+    /* Menu URL display */
+    .qr-url {
+        margin-top: 12px;
+        font-size: 0.68rem;
+        color: #94a3b8;
+        word-break: break-all;
+        line-height: 1.4;
+        max-width: 100%;
+    }
+
+    /* Copy button */
+    .btn-copy {
+        margin-top: 8px;
+        background: #f1f5f9; border: none; border-radius: 7px;
+        color: #475569; font-size: 0.72rem; font-weight: 600;
+        padding: 4px 12px; cursor: pointer;
+        display: inline-flex; align-items: center; gap: 4px;
+        transition: background 0.15s;
+    }
+    .btn-copy:hover  { background: #e2e8f0; }
+    .btn-copy.copied { background: #dcfce7; color: #15803d; }
+
+    /* ── Empty / no-tables state ────────────────────────────────────── */
+    .empty-state {
+        text-align: center; padding: 56px 20px;
+        background: #fff; border-radius: 14px;
+        border: 1px solid #f1f5f9;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        color: #94a3b8;
+    }
+    .empty-state i { font-size: 2.5rem; display: block; margin-bottom: 12px; }
+
+    /* ── Section heading ────────────────────────────────────────────── */
+    .section-heading {
+        font-size: 0.88rem; font-weight: 700; color: #0f172a;
+        display: flex; align-items: center; gap: 8px;
+    }
+    .table-count-chip {
+        font-size: 0.72rem; font-weight: 600; color: #64748b;
+        background: #f1f5f9; padding: 2px 9px; border-radius: 20px;
+    }
+</style>
+}
+
+<!-- ── Page heading ──────────────────────────────────────────────────────── -->
+<div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-4">
+    <div>
+        <div class="page-heading">
+            <i class="bi bi-qr-code me-2" style="color:#1d4ed8;"></i>QR Codes
+        </div>
+        <div class="page-subheading">@restaurant["RestaurantName"]</div>
+    </div>
+    <a href="/Admin/Dashboard" class="btn-back">
+        <i class="bi bi-arrow-left"></i> Dashboard
+    </a>
+</div>
+
+<!-- ── Info bar ──────────────────────────────────────────────────────────── -->
+<div class="info-bar">
+    <div class="info-chip">
+        <i class="bi bi-shop"></i>
+        <span>Restaurant&nbsp;<strong>@restaurant["RestaurantName"]</strong></span>
+    </div>
+    <div class="info-chip">
+        <i class="bi bi-table"></i>
+        <span>Total Tables&nbsp;<strong>@totalTables</strong></span>
+    </div>
+    <div class="info-chip">
+        <i class="bi bi-qr-code-scan"></i>
+        <span>QR Codes Generated&nbsp;<strong>@(tables?.Rows.Count ?? 0)</strong></span>
+    </div>
+</div>
+
+<!-- ── Alerts ────────────────────────────────────────────────────────────── -->
+@if (ViewBag.SuccessMessage != null)
+{
+    <div class="alert-success">
+        <i class="bi bi-check-circle-fill me-2"></i>@ViewBag.SuccessMessage
+    </div>
+}
+@if (ViewBag.ErrorMessage != null)
+{
+    <div class="alert-error">
+        <i class="bi bi-exclamation-circle-fill me-2"></i>@ViewBag.ErrorMessage
+    </div>
+}
+
+<!-- ── Action buttons ────────────────────────────────────────────────────── -->
+<div class="d-flex gap-3 flex-wrap mb-4">
+
+    <!-- Generate QR Codes — POST with CSRF token -->
+    <form method="post" action="/Admin/GenerateQRCodes/@restaurantId">
+        @Html.AntiForgeryToken()
+        <button type="submit" class="btn-primary-action"
+                onclick="return confirm('Generate QR codes for all @totalTables tables? Existing tables will be skipped.')">
+            <i class="bi bi-qr-code"></i>
+            @(tables != null && tables.Rows.Count > 0 ? "Regenerate Missing QR Codes" : "Generate QR Codes")
+        </button>
+    </form>
+
+    <!-- Download ZIP — GET, no CSRF needed -->
+    @if (tables != null && tables.Rows.Count > 0)
+    {
+        <a href="/Admin/DownloadQRCodes/@restaurantId" class="btn-secondary-action">
+            <i class="bi bi-download"></i> Download All QR Codes (.zip)
+        </a>
+    }
+</div>
+
+<!-- ── QR Cards grid ──────────────────────────────────────────────────────── -->
+@if (tables != null && tables.Rows.Count > 0)
+{
+    <div class="section-heading mb-1">
+        <i class="bi bi-grid-3x3-gap text-primary"></i>
+        Table QR Codes
+        <span class="table-count-chip">@tables.Rows.Count tables</span>
+    </div>
+    <p style="font-size:0.78rem; color:#94a3b8; margin-bottom:4px;">
+        Each QR code links to the AR menu for that specific table.
+        Print and place on the physical table.
+    </p>
+
+    <div class="qr-grid">
+        @foreach (DataRow row in tables.Rows)
+        {
+            var tableNumber = row["TableNumber"].ToString();
+            var qrGuid      = row["QRCodeString"].ToString();
+            var imageUrl    = row["QRCodeImageURL"] == DBNull.Value ? "" : row["QRCodeImageURL"].ToString();
+            var menuUrl     = $"{baseUrl}/ar/menu/{qrGuid}";
+
+            <div class="qr-card">
+                <div class="table-badge">Table @tableNumber</div>
+
+                @if (!string.IsNullOrEmpty(imageUrl))
+                {
+                    <img src="@imageUrl" class="qr-image" alt="QR Code Table @tableNumber" loading="lazy" />
+                }
+                else
+                {
+                    <div class="qr-placeholder">
+                        <i class="bi bi-qr-code"></i>
+                        <span>No image</span>
+                    </div>
+                }
+
+                <div class="qr-url">@menuUrl</div>
+
+                <button class="btn-copy" onclick="copyUrl(this, '@menuUrl')" title="Copy URL">
+                    <i class="bi bi-clipboard"></i> Copy URL
+                </button>
+            </div>
+        }
+    </div>
+}
+else
+{
+    <div class="empty-state">
+        <i class="bi bi-qr-code"></i>
+        <div style="font-weight:600; color:#475569; font-size:0.95rem;">No QR codes yet</div>
+        <div style="font-size:0.82rem; margin-top:6px; max-width:300px; margin-left:auto; margin-right:auto;">
+            Click <strong>Generate QR Codes</strong> above to create a QR code for each of the
+            @totalTables table(s) in this restaurant.
+        </div>
+    </div>
+}
+
+@section Scripts {
+<script>
+    // ── Copy URL to clipboard ───────────────────────────────────────────────
+    async function copyUrl(btn, url) {
+        try {
+            await navigator.clipboard.writeText(url);
+            btn.innerHTML = '<i class="bi bi-check2"></i> Copied!';
+            btn.classList.add('copied');
+            setTimeout(() => {
+                btn.innerHTML = '<i class="bi bi-clipboard"></i> Copy URL';
+                btn.classList.remove('copied');
+            }, 2000);
+        } catch {
+            // Fallback for older browsers
+            const ta = document.createElement('textarea');
+            ta.value = url;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            btn.innerHTML = '<i class="bi bi-check2"></i> Copied!';
+            btn.classList.add('copied');
+            setTimeout(() => {
+                btn.innerHTML = '<i class="bi bi-clipboard"></i> Copy URL';
+                btn.classList.remove('copied');
+            }, 2000);
+        }
+    }
+</script>
+}
