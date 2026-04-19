@@ -1,0 +1,644 @@
+﻿@using System.Data
+@{
+    Layout = "_RestaurantLayout";
+    ViewData["Title"] = "Dashboard";
+
+    var restaurant   = ViewBag.Restaurant   as DataRow;
+    var dishes       = ViewBag.Dishes       as DataTable;
+    var tables       = ViewBag.Tables       as DataTable;
+    var topDishes    = ViewBag.TopDishes    as DataTable;
+    var requests     = ViewBag.UpdateRequests as DataTable;
+    var chartData    = ViewBag.ChartData    as DataTable;
+
+    var planType     = restaurant!["PlanType"].ToString()!;
+    var status       = restaurant["Status"].ToString()!;
+    var trialDays    = (int)ViewBag.TrialDaysLeft;
+
+    // Pass restaurant name to layout navbar
+    ViewBag.RestaurantNameNav = restaurant["RestaurantName"].ToString();
+
+    // Build Chart.js data arrays from the 7-day DataTable
+    var chartLabels = new List<string>();
+    var chartCounts = new List<int>();
+    if (chartData != null)
+    {
+        foreach (DataRow row in chartData.Rows)
+        {
+            chartLabels.Add(Convert.ToDateTime(row["ScanDate"]).ToString("ddd dd"));
+            chartCounts.Add(Convert.ToInt32(row["ScanCount"]));
+        }
+    }
+    var labelsJson = "[" + string.Join(",", chartLabels.Select(l => $"\"{l}\"")) + "]";
+    var countsJson = "[" + string.Join(",", chartCounts) + "]";
+}
+
+@section Styles {
+<style>
+    /* ── Page heading ───────────────────────────────────────────────── */
+    .page-heading    { font-size: 1.25rem; font-weight: 700; color: #0f172a; }
+    .page-subheading { font-size: 0.82rem; color: #94a3b8; margin-top: 2px; }
+
+    /* ── Status bar ─────────────────────────────────────────────────── */
+    .status-bar {
+        border-radius: 12px; padding: 14px 18px;
+        display: flex; align-items: center; gap: 12px;
+        flex-wrap: wrap; margin-bottom: 22px;
+        font-size: 0.85rem; font-weight: 600;
+    }
+    .status-bar.active   { background:#f0fdf4; border:1.5px solid #86efac; color:#15803d; }
+    .status-bar.trial    { background:#fffbeb; border:1.5px solid #fde68a; color:#92400e; }
+    .status-bar.paused   { background:#fef2f2; border:1.5px solid #fecaca; color:#b91c1c; }
+    .status-bar.cancelled{ background:#f8fafc; border:1.5px solid #e2e8f0; color:#64748b; }
+
+    .status-bar i    { font-size: 1.1rem; }
+    .status-bar-text { flex: 1; }
+    .status-badge {
+        font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em;
+        padding: 3px 10px; border-radius: 20px;
+    }
+    .sb-active    { background:#dcfce7; color:#15803d; }
+    .sb-trial     { background:#fef9c3; color:#92400e; }
+    .sb-paused    { background:#fee2e2; color:#b91c1c; }
+    .sb-cancelled { background:#f1f5f9; color:#64748b; }
+
+    /* ── Stat cards ─────────────────────────────────────────────────── */
+    .stat-card {
+        background: #fff; border: 1px solid #e2e8f0;
+        border-radius: 14px; padding: 18px 20px;
+        display: flex; align-items: center; gap: 14px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        transition: box-shadow 0.2s;
+    }
+    .stat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.08); }
+
+    .stat-icon {
+        width: 46px; height: 46px; border-radius: 11px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.2rem; flex-shrink: 0;
+    }
+    .si-blue   { background:#dbeafe; color:#1d4ed8; }
+    .si-violet { background:#ede9fe; color:#6d28d9; }
+    .si-green  { background:#dcfce7; color:#15803d; }
+
+    .stat-value { font-size: 1.7rem; font-weight: 800; color: #0f172a; line-height: 1; }
+    .stat-label { font-size: 0.75rem; font-weight: 500; color: #64748b; margin-top: 3px; }
+
+    /* ── Section cards ──────────────────────────────────────────────── */
+    .section-card {
+        background: #fff; border: 1px solid #e2e8f0;
+        border-radius: 14px; overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        margin-bottom: 20px;
+    }
+
+    .section-card-header {
+        padding: 14px 18px 12px;
+        border-bottom: 1px solid #f1f5f9;
+        font-size: 0.88rem; font-weight: 700; color: #0f172a;
+    }
+    .section-card-header i { color: #1d4ed8; margin-right: 7px; }
+    .section-card-body { padding: 18px; }
+
+    /* ── Chart ──────────────────────────────────────────────────────── */
+    .chart-wrap { position: relative; height: 180px; }
+
+    /* ── Dishes table ───────────────────────────────────────────────── */
+    .dishes-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .dishes-table thead th {
+        background: #f8fafc; font-size: 0.68rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.05em; color: #64748b;
+        padding: 9px 12px; text-align: left;
+        border-bottom: 1px solid #e2e8f0; white-space: nowrap;
+    }
+    .dishes-table tbody tr { border-bottom: 1px solid #f1f5f9; transition: background 0.1s; }
+    .dishes-table tbody tr:hover { background: #f8fafc; }
+    .dishes-table tbody tr:last-child { border-bottom: none; }
+    .dishes-table td { padding: 10px 12px; vertical-align: middle; color: #334155; }
+    .dishes-table tr.inactive-row { opacity: 0.5; }
+
+    /* Dish thumbnail */
+    .dish-thumb {
+        width: 40px; height: 40px;
+        border-radius: 7px; object-fit: cover;
+        background: #f1f5f9; border: 1px solid #e2e8f0;
+    }
+    .dish-thumb-placeholder {
+        width: 40px; height: 40px; border-radius: 7px;
+        background: #f1f5f9; border: 1px solid #e2e8f0;
+        display: flex; align-items: center; justify-content: center;
+        color: #cbd5e1; font-size: 1.1rem;
+    }
+
+    /* Badges */
+    .badge-cat { font-size:0.65rem; font-weight:700; padding:2px 8px; border-radius:4px; background:#f1f5f9; color:#475569; white-space:nowrap; }
+    .badge-video { font-size:0.65rem; font-weight:700; padding:2px 8px; border-radius:4px; background:#dbeafe; color:#1e40af; white-space:nowrap; }
+    .badge-3d    { font-size:0.65rem; font-weight:700; padding:2px 8px; border-radius:4px; background:#ede9fe; color:#5b21b6; white-space:nowrap; }
+
+    /* Toggle button */
+    .btn-toggle-dish {
+        font-size:0.7rem; font-weight:600; padding:4px 10px; border-radius:6px;
+        border:none; cursor:pointer; transition:opacity 0.15s;
+        display:inline-flex; align-items:center; gap:3px; white-space:nowrap;
+    }
+    .btn-toggle-dish.active   { background:#dcfce7; color:#15803d; }
+    .btn-toggle-dish.inactive { background:#fee2e2; color:#b91c1c; }
+    .btn-toggle-dish:hover    { opacity: 0.75; }
+
+    /* ── QR grid ─────────────────────────────────────────────────────── */
+    .qr-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(110px,1fr)); gap:12px; }
+
+    .qr-card {
+        background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px;
+        padding:10px 8px; text-align:center;
+        transition: box-shadow 0.15s;
+    }
+    .qr-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.08); }
+
+    .qr-img { width:80px; height:80px; object-fit:contain; border-radius:6px; }
+    .qr-label { font-size:0.7rem; font-weight:700; color:#475569; margin-top:6px; }
+
+    .btn-dl {
+        display:inline-flex; align-items:center; gap:3px;
+        font-size:0.62rem; font-weight:600; color:#1d4ed8;
+        background:#dbeafe; border:none; border-radius:5px;
+        padding:2px 7px; margin-top:4px; cursor:pointer;
+        text-decoration:none; transition:background 0.1s;
+    }
+    .btn-dl:hover { background:#bfdbfe; color:#1e40af; }
+
+    /* ── Alerts ─────────────────────────────────────────────────────── */
+    .alert-success {
+        background:#f0fdf4; border:1.5px solid #86efac;
+        border-radius:10px; color:#15803d;
+        padding:11px 16px; font-size:0.85rem; margin-bottom:18px;
+    }
+    .alert-error {
+        background:#fef2f2; border:1.5px solid #fecaca;
+        border-radius:10px; color:#b91c1c;
+        padding:11px 16px; font-size:0.85rem; margin-bottom:18px;
+    }
+
+    /* ── Update request history ─────────────────────────────────────── */
+    .request-item {
+        padding: 10px 0; border-bottom: 1px solid #f1f5f9;
+        font-size: 0.8rem;
+    }
+    .request-item:last-child { border-bottom: none; }
+    .req-desc { color: #334155; margin-bottom: 3px; }
+    .req-meta { font-size: 0.72rem; color: #94a3b8; }
+
+    .req-badge {
+        font-size: 0.65rem; font-weight: 700; padding: 2px 8px;
+        border-radius: 20px; white-space: nowrap;
+    }
+    .req-pending    { background: #fef9c3; color: #92400e; }
+    .req-inprogress { background: #dbeafe; color: #1e40af; }
+    .req-completed  { background: #dcfce7; color: #15803d; }
+
+    /* ── Request form ───────────────────────────────────────────────── */
+    .form-control-owner {
+        border-radius: 9px; border: 1.5px solid #e2e8f0;
+        padding: 0.6rem 0.85rem; font-size: 0.88rem;
+        width: 100%; resize: vertical;
+        transition: border-color 0.2s;
+    }
+    .form-control-owner:focus {
+        border-color: #1d4ed8; outline: none;
+        box-shadow: 0 0 0 3px rgba(29,78,216,0.09);
+    }
+
+    .btn-submit-request {
+        background: linear-gradient(135deg, #1d4ed8, #6366f1);
+        border: none; border-radius: 9px; color: #fff;
+        font-weight: 600; font-size: 0.88rem;
+        padding: 9px 20px; cursor: pointer;
+        display: inline-flex; align-items: center; gap: 6px;
+        transition: opacity 0.15s;
+        margin-top: 10px;
+    }
+    .btn-submit-request:hover { opacity: 0.9; }
+
+    /* ── Plan info chip ─────────────────────────────────────────────── */
+    .plan-chip {
+        display: inline-flex; align-items: center; gap: 6px;
+        font-size: 0.72rem; font-weight: 700;
+        padding: 3px 10px; border-radius: 20px;
+    }
+    .plan-basic      { background: #f1f5f9; color: #475569; }
+    .plan-pro        { background: #ede9fe; color: #6d28d9; }
+    .plan-enterprise { background: #dbeafe; color: #1d4ed8; }
+
+    .table-scroll { overflow-x: auto; }
+
+    /* ── Top dish bar ───────────────────────────────────────────────── */
+    .top-dish-row { display:flex; align-items:center; gap:10px; padding:6px 0; }
+    .top-dish-name { font-size:0.82rem; color:#334155; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .top-dish-bar-wrap { width: 100px; height: 7px; background:#f1f5f9; border-radius:99px; overflow:hidden; flex-shrink:0; }
+    .top-dish-bar { height:100%; background:linear-gradient(90deg,#1d4ed8,#6366f1); border-radius:99px; }
+    .top-dish-count { font-size:0.75rem; font-weight:700; color:#64748b; white-space:nowrap; }
+</style>
+}
+
+<!-- ── Alerts ────────────────────────────────────────────────────────────── -->
+@if (ViewBag.SuccessMessage != null)
+{
+    <div class="alert-success"><i class="bi bi-check-circle-fill me-2"></i>@ViewBag.SuccessMessage</div>
+}
+@if (ViewBag.ErrorMessage != null)
+{
+    <div class="alert-error"><i class="bi bi-exclamation-circle-fill me-2"></i>@ViewBag.ErrorMessage</div>
+}
+
+<!-- ── Page heading ──────────────────────────────────────────────────────── -->
+<div class="mb-3">
+    <div class="page-heading">
+        Welcome, @restaurant["OwnerName"] 👋
+    </div>
+    <div class="page-subheading">
+        @restaurant["RestaurantName"]
+        &nbsp;
+        <span class="plan-chip plan-@planType.ToLower()">@planType Plan</span>
+    </div>
+</div>
+
+<!-- ── Subscription status bar ───────────────────────────────────────────── -->
+@{
+    var statusClass = status.ToLower();
+    var badgeClass  = $"sb-{status.ToLower()}";
+    string statusMsg;
+    string statusIcon;
+
+    if (status == "Active")
+    {
+        statusMsg  = "Your subscription is active. Your AR menu is live for customers.";
+        statusIcon = "bi-check-circle-fill";
+    }
+    else if (status == "Trial")
+    {
+        statusMsg  = trialDays > 0
+            ? $"You are on a free trial. {trialDays} day{(trialDays == 1 ? "" : "s")} remaining."
+            : "Your trial has expired. Contact us to activate your subscription.";
+        statusIcon = "bi-hourglass-split";
+    }
+    else if (status == "Paused")
+    {
+        statusMsg  = "Your subscription is paused. QR codes are currently showing 'menu unavailable' to customers. Please contact support.";
+        statusIcon = "bi-pause-circle-fill";
+    }
+    else
+    {
+        statusMsg  = "Your account has been cancelled. Please contact support.";
+        statusIcon = "bi-x-circle-fill";
+    }
+}
+
+<div class="status-bar @statusClass mb-4">
+    <i class="bi @statusIcon"></i>
+    <span class="status-bar-text">@statusMsg</span>
+    <span class="status-badge @badgeClass">@status</span>
+</div>
+
+<!-- ── Stat cards ────────────────────────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+    <div class="col-4">
+        <div class="stat-card">
+            <div class="stat-icon si-blue"><i class="bi bi-qr-code-scan"></i></div>
+            <div>
+                <div class="stat-value">@ViewBag.ScansToday</div>
+                <div class="stat-label">Scans Today</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-4">
+        <div class="stat-card">
+            <div class="stat-icon si-violet"><i class="bi bi-graph-up"></i></div>
+            <div>
+                <div class="stat-value">@ViewBag.ScansThisWeek</div>
+                <div class="stat-label">This Week</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-4">
+        <div class="stat-card">
+            <div class="stat-icon si-green"><i class="bi bi-star-fill"></i></div>
+            <div>
+                <div class="stat-value" style="font-size:0.85rem; margin-top:2px;">@ViewBag.MostViewedDish</div>
+                <div class="stat-label">Top Dish</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Chart + Top dishes row ────────────────────────────────────────────── -->
+<div class="row g-3 mb-2">
+
+    <!-- Bar chart -->
+    <div class="col-lg-7">
+        <div class="section-card h-100">
+            <div class="section-card-header">
+                <i class="bi bi-bar-chart-line"></i>QR Scans — Last 7 Days
+            </div>
+            <div class="section-card-body">
+                <div class="chart-wrap">
+                    <canvas id="scansChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top 5 dishes -->
+    <div class="col-lg-5">
+        <div class="section-card h-100">
+            <div class="section-card-header">
+                <i class="bi bi-fire"></i>Most Viewed This Week
+            </div>
+            <div class="section-card-body">
+                @if (topDishes != null && topDishes.Rows.Count > 0)
+                {
+                    var maxViews = Convert.ToInt32(topDishes.Rows[0]["ViewCount"]);
+
+                    @foreach (DataRow row in topDishes.Rows)
+                    {
+                        var views = Convert.ToInt32(row["ViewCount"]);
+                        var pct   = maxViews > 0 ? (int)(views * 100.0 / maxViews) : 0;
+                        <div class="top-dish-row">
+                            <span class="top-dish-name">@row["DishName"]</span>
+                            <div class="top-dish-bar-wrap">
+                                <div class="top-dish-bar" style="width:@pct%"></div>
+                            </div>
+                            <span class="top-dish-count">@views</span>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div style="text-align:center; padding:28px 0; color:#94a3b8; font-size:0.82rem;">
+                        <i class="bi bi-eye-slash" style="font-size:1.5rem; display:block; margin-bottom:8px;"></i>
+                        No dish views yet this week
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Dishes list ────────────────────────────────────────────────────────── -->
+<div class="section-card mt-3">
+    <div class="section-card-header">
+        <i class="bi bi-grid"></i>Your Dishes
+        <span style="font-weight:400; font-size:0.78rem; color:#94a3b8; margin-left:6px;">
+            (@(dishes?.Rows.Count ?? 0) total)
+        </span>
+    </div>
+    <div class="table-scroll">
+        @if (dishes != null && dishes.Rows.Count > 0)
+        {
+            <table class="dishes-table">
+                <thead>
+                    <tr>
+                        <th style="width:50px;"></th>
+                        <th>Dish Name</th>
+                        <th>Category</th>
+                        <th>AR Type</th>
+                        <th>Price</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (DataRow row in dishes.Rows)
+                    {
+                        var isActive    = Convert.ToBoolean(row["IsActive"]);
+                        var contentType = row["ContentType"].ToString()!;
+                        var thumbUrl    = row["ThumbnailURL"] == DBNull.Value ? "" : row["ThumbnailURL"].ToString();
+                        var dishId      = row["DishID"].ToString();
+
+                        <tr class="@(!isActive ? "inactive-row" : "")">
+                            <td style="padding-left:12px; padding-right:4px;">
+                                @if (!string.IsNullOrEmpty(thumbUrl))
+                                {
+                                    <img src="@thumbUrl" class="dish-thumb" alt="@row["DishName"]" loading="lazy" />
+                                }
+                                else
+                                {
+                                    <div class="dish-thumb-placeholder"><i class="bi bi-image"></i></div>
+                                }
+                            </td>
+                            <td>
+                                <span style="font-weight:600;">@row["DishName"]</span>
+                            </td>
+                            <td><span class="badge-cat">@row["Category"]</span></td>
+                            <td>
+                                @if (contentType == "3DModel")
+                                {
+                                    <span class="badge-3d"><i class="bi bi-box me-1"></i>3D</span>
+                                }
+                                else
+                                {
+                                    <span class="badge-video"><i class="bi bi-camera-video-fill me-1"></i>Video</span>
+                                }
+                            </td>
+                            <td style="font-weight:600;">₹@string.Format("{0:N0}", row["Price"])</td>
+                            <td>
+                                <form method="post" action="/Restaurant/ToggleDish" style="display:inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="dishId" value="@dishId" />
+                                    <button type="submit"
+                                            class="btn-toggle-dish @(isActive ? "active" : "inactive")"
+                                            onclick="return confirm('@(isActive ? "Deactivate this dish?" : "Activate this dish?")')">
+                                        @if (isActive)
+                                        {
+                                            <i class="bi bi-toggle2-on"></i><text> Active</text>
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-toggle2-off"></i><text> Inactive</text>
+                                        }
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        else
+        {
+            <div style="text-align:center; padding:40px 20px; color:#94a3b8; font-size:0.85rem;">
+                <i class="bi bi-egg-fried" style="font-size:2rem; display:block; margin-bottom:10px;"></i>
+                No dishes yet. Contact support to add dishes to your menu.
+            </div>
+        }
+    </div>
+</div>
+
+<!-- ── QR Codes ───────────────────────────────────────────────────────────── -->
+<div class="section-card">
+    <div class="section-card-header">
+        <i class="bi bi-qr-code"></i>Table QR Codes
+    </div>
+    <div class="section-card-body">
+        @if (tables != null && tables.Rows.Count > 0)
+        {
+            <p style="font-size:0.78rem; color:#94a3b8; margin-bottom:14px;">
+                Print each QR code and place it on the corresponding table.
+                Customers scan it to open your AR menu.
+            </p>
+            <div class="qr-grid">
+                @foreach (DataRow row in tables.Rows)
+                {
+                    var imgUrl  = row["QRCodeImageURL"] == DBNull.Value ? "" : row["QRCodeImageURL"].ToString();
+                    var tableNo = row["TableNumber"].ToString();
+                    var tableId = row["TableID"].ToString();
+                    <div class="qr-card">
+                        @if (!string.IsNullOrEmpty(imgUrl))
+                        {
+                            <img src="@imgUrl" class="qr-img" alt="Table @tableNo" loading="lazy" />
+                        }
+                        else
+                        {
+                            <div style="width:80px;height:80px;background:#f1f5f9;border-radius:6px;
+                                        display:flex;align-items:center;justify-content:center;
+                                        color:#cbd5e1;font-size:1.5rem;margin:0 auto;">
+                                <i class="bi bi-qr-code"></i>
+                            </div>
+                        }
+                        <div class="qr-label">Table @tableNo</div>
+                        @if (!string.IsNullOrEmpty(imgUrl))
+                        {
+                            <a href="/Restaurant/DownloadQR?tableId=@tableId" class="btn-dl">
+    <i class="bi bi-download"></i> Save
+</a>
+                        }
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div style="text-align:center; padding:28px 0; color:#94a3b8; font-size:0.82rem;">
+                <i class="bi bi-qr-code" style="font-size:1.8rem; display:block; margin-bottom:8px;"></i>
+                QR codes have not been generated yet. Contact support.
+            </div>
+        }
+    </div>
+</div>
+
+<!-- ── Menu Update Requests — Pro plan only ───────────────────────────────── -->
+@if (planType == "Pro")
+{
+    <div class="section-card">
+        <div class="section-card-header">
+            <i class="bi bi-pencil-square"></i>Request Menu Update
+        </div>
+        <div class="section-card-body">
+            <p style="font-size:0.82rem; color:#64748b; margin-bottom:14px;">
+                Describe the changes you need — new dishes, price updates, dish removals, etc.
+                We will process your request within 2 business days.
+            </p>
+
+            <form method="post" action="/Restaurant/RequestMenuUpdate">
+                @Html.AntiForgeryToken()
+                <textarea name="requestDescription"
+                          class="form-control-owner"
+                          rows="4"
+                          placeholder="e.g. Please add a new dish: Mango Lassi, ₹150, Vegetarian, Drink category. Also update the price of Paneer Tikka to ₹350."
+                          required minlength="10" maxlength="4000"></textarea>
+                <button type="submit" class="btn-submit-request">
+                    <i class="bi bi-send"></i> Submit Request
+                </button>
+            </form>
+
+            <!-- Recent requests -->
+            @if (requests != null && requests.Rows.Count > 0)
+            {
+                <div style="margin-top:20px; border-top:1px solid #f1f5f9; padding-top:14px;">
+                    <div style="font-size:0.78rem; font-weight:700; color:#64748b; margin-bottom:10px; text-transform:uppercase; letter-spacing:0.05em;">
+                        Recent Requests
+                    </div>
+                    @foreach (DataRow row in requests.Rows)
+                    {
+                        var reqStatus = row["Status"].ToString()!;
+                        var badgeCls  = reqStatus switch {
+                            "Pending"    => "req-pending",
+                            "InProgress" => "req-inprogress",
+                            "Completed"  => "req-completed",
+                            _            => "req-pending"
+                        };
+                        var desc = row["RequestDescription"].ToString()!;
+                        var shortDesc = desc.Length > 100 ? desc[..100] + "…" : desc;
+                        <div class="request-item">
+                            <div class="d-flex align-items-start justify-content-between gap-2">
+                                <div class="req-desc">@shortDesc</div>
+                                <span class="req-badge @badgeCls flex-shrink-0">@reqStatus</span>
+                            </div>
+                            <div class="req-meta">
+                                Submitted @Convert.ToDateTime(row["RequestedDate"]).ToString("dd MMM yyyy")
+                                @if (row["CompletedDate"] != DBNull.Value)
+                                {
+                                    <text> · Completed @Convert.ToDateTime(row["CompletedDate"]).ToString("dd MMM yyyy")</text>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@section Scripts {
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    const labels = @Html.Raw(labelsJson);
+    const counts = @Html.Raw(countsJson);
+
+    const ctx = document.getElementById('scansChart').getContext('2d');
+
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                label: 'QR Scans',
+                data: counts,
+                backgroundColor: 'rgba(59, 130, 246, 0.18)',
+                borderColor:     'rgba(59, 130, 246, 0.85)',
+                borderWidth: 1.5,
+                borderRadius: 6,
+                borderSkipped: false,
+            }]
+        },
+        options: {
+            responsive:          true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ` ${ctx.parsed.y} scan${ctx.parsed.y !== 1 ? 's' : ''}`
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { font: { size: 11 }, color: '#94a3b8' }
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1,
+                        precision: 0,
+                        font: { size: 11 },
+                        color: '#94a3b8'
+                    },
+                    grid: { color: 'rgba(0,0,0,0.05)' }
+                }
+            }
+        }
+    });
+})();
+</script>
+}
