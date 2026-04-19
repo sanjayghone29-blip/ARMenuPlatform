@@ -1,0 +1,549 @@
+﻿@{
+    Layout = null;
+    var qrCodeString = ViewBag.QrCodeString as string ?? "";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#0f172a" />
+    <title>AR Menu</title>
+    <style>
+        /* ── Reset ──────────────────────────────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:          #0f172a;
+            --surface:     #1e293b;
+            --surface2:    #273347;
+            --border:      #334155;
+            --text:        #f1f5f9;
+            --text-muted:  #94a3b8;
+            --accent:      #3b82f6;
+            --accent-dim:  #1d4ed8;
+            --veg:         #22c55e;
+            --nonveg:      #ef4444;
+            --card-radius: 14px;
+        }
+
+        html, body {
+            height: 100%;
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            overflow-x: hidden;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* ── Top header ─────────────────────────────────────────────── */
+        .header {
+            position: sticky; top: 0; z-index: 100;
+            background: var(--bg);
+            border-bottom: 1px solid var(--border);
+            padding: 14px 16px 10px;
+        }
+
+        .header-logo {
+            width: 32px; height: 32px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #3b82f6, #6366f1);
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 1rem; margin-right: 8px; vertical-align: middle;
+        }
+
+        .restaurant-name {
+            font-size: 1.05rem; font-weight: 700;
+            color: var(--text); vertical-align: middle;
+            display: inline;
+        }
+
+        .header-sub {
+            font-size: 0.72rem; color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        /* ── Category tabs (horizontal scroll) ──────────────────────── */
+        .category-tabs-wrap {
+            position: sticky; top: 65px; z-index: 99;
+            background: var(--bg);
+            padding: 10px 0 8px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .category-tabs {
+            display: flex; gap: 8px;
+            overflow-x: auto; padding: 0 16px;
+            scrollbar-width: none;
+        }
+        .category-tabs::-webkit-scrollbar { display: none; }
+
+        .tab-btn {
+            flex-shrink: 0;
+            background: var(--surface);
+            border: 1.5px solid var(--border);
+            border-radius: 20px; color: var(--text-muted);
+            font-size: 0.78rem; font-weight: 600;
+            padding: 6px 14px; cursor: pointer;
+            transition: all 0.15s; white-space: nowrap;
+        }
+        .tab-btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+        }
+
+        /* ── Menu body ──────────────────────────────────────────────── */
+        .menu-body { padding: 16px 12px 80px; }
+
+        .category-section { margin-bottom: 24px; }
+
+        .category-heading {
+            font-size: 0.8rem; font-weight: 800;
+            text-transform: uppercase; letter-spacing: 0.07em;
+            color: var(--text-muted);
+            margin-bottom: 12px; padding-left: 4px;
+        }
+
+        /* ── Dish card grid ─────────────────────────────────────────── */
+        .dish-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .dish-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--card-radius);
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.15s;
+            -webkit-tap-highlight-color: transparent;
+            position: relative;
+        }
+        .dish-card:active { transform: scale(0.97); }
+
+        /* Thumbnail */
+        .dish-thumb {
+            width: 100%; aspect-ratio: 1 / 1;
+            object-fit: cover;
+            background: var(--surface2);
+            display: block;
+        }
+
+        .dish-thumb-placeholder {
+            width: 100%; aspect-ratio: 1 / 1;
+            background: var(--surface2);
+            display: flex; align-items: center; justify-content: center;
+            color: var(--border); font-size: 2rem;
+        }
+
+        .dish-info { padding: 8px 9px 10px; }
+
+        .dish-name {
+            font-size: 0.82rem; font-weight: 700;
+            color: var(--text); line-height: 1.3;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .dish-meta {
+            display: flex; align-items: center; gap: 6px;
+            margin-top: 5px; flex-wrap: wrap;
+        }
+
+        .dish-price {
+            font-size: 0.82rem; font-weight: 800;
+            color: var(--accent);
+        }
+
+        /* Veg/Non-veg dot — FSSAI standard square */
+        .veg-indicator {
+            width: 13px; height: 13px;
+            border-radius: 2px; border: 1.5px solid;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .veg-indicator.veg { border-color: var(--veg); }
+        .veg-indicator.veg::after {
+            content: ''; width: 6px; height: 6px;
+            background: var(--veg); border-radius: 50%;
+        }
+        .veg-indicator.nonveg { border-color: var(--nonveg); }
+        .veg-indicator.nonveg::after {
+            content: ''; width: 0; height: 0;
+            border-left: 3.5px solid transparent;
+            border-right: 3.5px solid transparent;
+            border-bottom: 6px solid var(--nonveg);
+        }
+
+        /* Content type badge — top-right corner of card */
+        .content-badge {
+            position: absolute; top: 7px; right: 7px;
+            font-size: 0.6rem; font-weight: 800;
+            letter-spacing: 0.04em;
+            padding: 2px 7px; border-radius: 20px;
+            backdrop-filter: blur(4px);
+        }
+        .content-badge.video  { background: rgba(59,130,246,0.85); color: #fff; }
+        .content-badge.model3d { background: rgba(99,102,241,0.85); color: #fff; }
+
+        /* AR launch tap hint */
+        .dish-ar-hint {
+            font-size: 0.65rem; color: var(--accent);
+            font-weight: 600; margin-top: 4px;
+            display: flex; align-items: center; gap: 3px;
+        }
+
+        /* ── Skeleton loading ───────────────────────────────────────── */
+        @@keyframes shimmer {
+            0%   { background-position: -400px 0; }
+            100% { background-position: 400px 0; }
+        }
+
+        .skeleton {
+            background: linear-gradient(90deg, var(--surface) 25%, var(--surface2) 50%, var(--surface) 75%);
+            background-size: 800px 100%;
+            animation: shimmer 1.4s infinite;
+            border-radius: 8px;
+        }
+
+        .skeleton-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--card-radius);
+            overflow: hidden;
+        }
+
+        .skeleton-img  { width: 100%; aspect-ratio: 1/1; }
+        .skeleton-line { height: 12px; margin: 8px 9px 4px; }
+        .skeleton-line.short { width: 55%; height: 10px; margin: 4px 9px 10px; }
+
+        /* ── Unavailable screen ─────────────────────────────────────── */
+        .unavailable {
+            display: none;
+            position: fixed; inset: 0;
+            background: var(--bg);
+            flex-direction: column;
+            align-items: center; justify-content: center;
+            text-align: center; padding: 32px;
+            z-index: 200;
+        }
+        .unavailable.show { display: flex; }
+
+        .unavailable-icon {
+            font-size: 4rem; margin-bottom: 20px;
+        }
+
+        .unavailable-title {
+            font-size: 1.25rem; font-weight: 800; color: var(--text);
+            margin-bottom: 10px;
+        }
+
+        .unavailable-sub {
+            font-size: 0.9rem; color: var(--text-muted); line-height: 1.6;
+            max-width: 280px;
+        }
+
+        /* ── Bottom watermark ───────────────────────────────────────── */
+        .watermark {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            text-align: center;
+            font-size: 0.65rem; color: var(--text-muted);
+            padding: 10px 16px 12px;
+            background: linear-gradient(to top, var(--bg) 70%, transparent);
+            pointer-events: none;
+        }
+
+        .watermark span { opacity: 0.6; }
+
+        /* ── Error state ────────────────────────────────────────────── */
+        .error-state {
+            display: none;
+            text-align: center; padding: 60px 24px;
+            color: var(--text-muted);
+        }
+        .error-state.show { display: block; }
+        .error-state p { margin-top: 10px; font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+
+<!-- ── Unavailable screen ────────────────────────────────────────────────── -->
+<div class="unavailable" id="unavailableScreen">
+    <div class="unavailable-icon">🚫</div>
+    <div class="unavailable-title">Menu Temporarily Unavailable</div>
+    <div class="unavailable-sub">
+        This restaurant's menu is currently paused.<br />
+        Please ask your server for assistance.
+    </div>
+    <div class="watermark" style="position:relative; margin-top:40px;">
+        <span>Powered by AR Menu Platform</span>
+    </div>
+</div>
+
+<!-- ── Header ────────────────────────────────────────────────────────────── -->
+<div class="header" id="headerSection">
+    <div>
+        <span class="header-logo">🍽️</span>
+        <span class="restaurant-name" id="restaurantName">Loading…</span>
+    </div>
+    <div class="header-sub" id="headerSub">AR Menu</div>
+</div>
+
+<!-- ── Category tabs ─────────────────────────────────────────────────────── -->
+<div class="category-tabs-wrap" id="tabsWrap" style="display:none;">
+    <div class="category-tabs" id="categoryTabs"></div>
+</div>
+
+<!-- ── Menu body ─────────────────────────────────────────────────────────── -->
+<div class="menu-body" id="menuBody">
+
+    <!-- Skeleton shown while loading -->
+    <div id="skeletonGrid">
+        <div style="margin-bottom:24px;">
+            <div class="skeleton" style="height:14px; width:80px; margin-bottom:14px;"></div>
+            <div class="dish-grid">
+                @for (int i = 0; i < 4; i++)
+                {
+                    <div class="skeleton-card">
+                        <div class="skeleton skeleton-img"></div>
+                        <div class="skeleton skeleton-line"></div>
+                        <div class="skeleton skeleton-line short"></div>
+                    </div>
+                }
+            </div>
+        </div>
+        <div>
+            <div class="skeleton" style="height:14px; width:100px; margin-bottom:14px;"></div>
+            <div class="dish-grid">
+                @for (int i = 0; i < 2; i++)
+                {
+                    <div class="skeleton-card">
+                        <div class="skeleton skeleton-img"></div>
+                        <div class="skeleton skeleton-line"></div>
+                        <div class="skeleton skeleton-line short"></div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Real content injected here by JS -->
+    <div id="menuContent" style="display:none;"></div>
+
+    <!-- Error state -->
+    <div class="error-state" id="errorState">
+        <div style="font-size:2.5rem;">😕</div>
+        <p>Failed to load the menu.<br />Please check your connection and try again.</p>
+    </div>
+</div>
+
+<!-- ── Watermark ─────────────────────────────────────────────────────────── -->
+<div class="watermark">
+    <span>Powered by AR Menu Platform</span>
+</div>
+
+<script>
+(function () {
+    // ── Config ──────────────────────────────────────────────────────────────
+    const QR_CODE_STRING = '@qrCodeString';
+    const API_BASE       = '/api';
+    let   QR_IMAGE_URL   = '';   // filled from API response — used for VideoAR
+
+    // ── Utility: get URL param ───────────────────────────────────────────────
+    const qsp = (k) => new URLSearchParams(window.location.search).get(k) || '';
+
+    // ── Log scan event ───────────────────────────────────────────────────────
+    async function logScan(scanType, dishId = null) {
+        try {
+            await fetch(`${API_BASE}/scan/log`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    qrCodeString: QR_CODE_STRING,
+                    dishId,
+                    scanType
+                })
+            });
+        } catch (_) { /* non-critical — ignore failure */ }
+    }
+
+    // ── Render category tabs ─────────────────────────────────────────────────
+    function renderTabs(categories) {
+        const tabsEl = document.getElementById('categoryTabs');
+        const wrap   = document.getElementById('tabsWrap');
+
+        categories.forEach((cat, i) => {
+            const btn = document.createElement('button');
+            btn.className  = 'tab-btn' + (i === 0 ? ' active' : '');
+            btn.textContent = cat.name;
+            btn.dataset.cat = cat.name;
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const section = document.getElementById(`cat-${CSS.escape(cat.name)}`);
+                if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+            tabsEl.appendChild(btn);
+        });
+
+        wrap.style.display = 'block';
+    }
+
+    // ── Build a single dish card ─────────────────────────────────────────────
+    function buildDishCard(dish, qrCodeString) {
+        const card = document.createElement('div');
+        card.className = 'dish-card';
+
+        // Thumb
+        const thumbEl = dish.thumbnailURL
+            ? `<img class="dish-thumb" src="${dish.thumbnailURL}" alt="${dish.dishName}" loading="lazy" />`
+            : `<div class="dish-thumb-placeholder">🍽️</div>`;
+
+        // Content badge
+        const badgeClass = dish.contentType === '3DModel' ? 'model3d' : 'video';
+        const badgeLabel = dish.contentType === '3DModel' ? '3D' : '▶ AR';
+
+        // Veg indicator
+        const vegClass = dish.isVegetarian ? 'veg' : 'nonveg';
+
+        card.innerHTML = `
+            ${thumbEl}
+            <span class="content-badge ${badgeClass}">${badgeLabel}</span>
+            <div class="dish-info">
+                <div class="dish-name">${dish.dishName}</div>
+                <div class="dish-meta">
+                    <span class="dish-price">₹${Number(dish.price).toFixed(0)}</span>
+                    <span class="veg-indicator ${vegClass}"></span>
+                </div>
+                <div class="dish-ar-hint">
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                        <circle cx="5" cy="5" r="4.5" stroke="#3b82f6" stroke-width="1"/>
+                        <polygon points="4,3 7.5,5 4,7" fill="#3b82f6"/>
+                    </svg>
+                    Tap to view in AR
+                </div>
+            </div>`;
+
+        card.addEventListener('click', () => launchAR(dish, qrCodeString));
+        return card;
+    }
+
+    // ── Launch AR experience ─────────────────────────────────────────────────
+    function launchAR(dish, qrCodeString) {
+        logScan('DishView', dish.dishId);
+
+        const params = new URLSearchParams({
+            dishId:       dish.dishId,
+            dishName:     dish.dishName,
+            price:        dish.price,
+            contentURL:   dish.contentURL,
+            contentType:  dish.contentType,
+            qrCodeString: qrCodeString,
+            qrImageUrl:   QR_IMAGE_URL
+        });
+
+        if (dish.contentType === '3DModel') {
+            // 3D AR — placeholder for Phase 7
+            alert('3D AR coming soon! Video AR is available now.');
+            return;
+        }
+
+        window.location.href = `/ar/video?${params.toString()}`;
+    }
+
+    // ── Render full menu ─────────────────────────────────────────────────────
+    function renderMenu(data) {
+        const content = document.getElementById('menuContent');
+        content.innerHTML = '';
+
+        data.categories.forEach(cat => {
+            const section = document.createElement('div');
+            section.className = 'category-section';
+            section.id        = `cat-${cat.name}`;
+
+            const heading = document.createElement('div');
+            heading.className   = 'category-heading';
+            heading.textContent = cat.name;
+            section.appendChild(heading);
+
+            const grid = document.createElement('div');
+            grid.className = 'dish-grid';
+
+            cat.dishes.forEach(dish => {
+                grid.appendChild(buildDishCard(dish, QR_CODE_STRING));
+            });
+
+            section.appendChild(grid);
+            content.appendChild(section);
+        });
+
+        renderTabs(data.categories);
+    }
+
+    // ── Intersection observer: update active tab on scroll ──────────────────
+    function initScrollSpy() {
+        const observer = new IntersectionObserver(entries => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const catName = entry.target.id.replace('cat-', '');
+                    document.querySelectorAll('.tab-btn').forEach(btn => {
+                        btn.classList.toggle('active', btn.dataset.cat === catName);
+                    });
+                }
+            });
+        }, { threshold: 0.4 });
+
+        document.querySelectorAll('.category-section').forEach(s => observer.observe(s));
+    }
+
+    // ── Main: fetch menu ─────────────────────────────────────────────────────
+    async function init() {
+        // Fire MenuOpen scan log immediately (fire-and-forget)
+        logScan('MenuOpen');
+
+        let data;
+        try {
+            const res = await fetch(`${API_BASE}/menu/${QR_CODE_STRING}`);
+            data = await res.json();
+        } catch (_) {
+            document.getElementById('skeletonGrid').style.display = 'none';
+            document.getElementById('errorState').classList.add('show');
+            return;
+        }
+
+        // Hide skeleton always
+        document.getElementById('skeletonGrid').style.display = 'none';
+
+        // Not allowed (Paused / Cancelled)
+        if (!data.allowed) {
+            document.getElementById('unavailableScreen').classList.add('show');
+            return;
+        }
+
+        // Store QR image URL for VideoAR navigation
+        QR_IMAGE_URL = data.qrImageUrl || '';
+
+        // Update header
+        document.getElementById('restaurantName').textContent = data.restaurantName;
+        document.getElementById('headerSub').textContent      = `${data.categories.reduce((n, c) => n + c.dishes.length, 0)} dishes available`;
+
+        // Render menu
+        renderMenu(data);
+
+        document.getElementById('menuContent').style.display = 'block';
+
+        // Activate scroll spy after content is in DOM
+        requestAnimationFrame(initScrollSpy);
+    }
+
+    init();
+})();
+</script>
+
+</body>
+</html>

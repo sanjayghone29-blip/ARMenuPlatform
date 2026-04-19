@@ -1,0 +1,456 @@
+﻿@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>AR Viewer</title>
+
+    <!--
+        THREE.JS r128 — must load BEFORE MindAR because MindAR extends THREE.
+        MindAR 1.2.5 image tracking with Three.js renderer.
+
+        IMPORTANT — .mind file requirement:
+        MindAR image tracking requires a compiled .mind file of the target image
+        (in this case, the QR code PNG stored in Azure Blob Storage).
+
+        To generate .mind files for each QR code:
+        1. Go to: https://hiukim.github.io/mind-ar-js-doc/tools/compile
+        2. Upload the QR code PNG (from Azure Blob /qr-codes/{restaurantId}/Table-N.png)
+        3. Download the compiled .mind file
+        4. Upload the .mind file to Azure Blob at the same path with .mind extension
+           e.g. /qr-codes/{restaurantId}/Table-N.mind
+        5. This app derives the .mind URL from qrImageUrl by replacing .png → .mind
+    -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
+
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:       #0f172a;
+            --text:     #f1f5f9;
+            --muted:    #94a3b8;
+            --accent:   #3b82f6;
+            --surface:  rgba(15,23,42,0.85);
+        }
+
+        html, body {
+            width: 100%; height: 100%;
+            background: #000;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+
+        /* ── Full-screen MindAR container ───────────────────────────── */
+        #ar-container {
+            width: 100%; height: 100%;
+            position: relative;
+        }
+
+        /* ── Back button ────────────────────────────────────────────── */
+        #btn-back {
+            position: fixed; top: env(safe-area-inset-top, 16px); left: 16px;
+            z-index: 1000;
+            width: 42px; height: 42px;
+            background: var(--surface);
+            border: none; border-radius: 50%;
+            color: var(--text); font-size: 1.2rem;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+        }
+        #btn-back:active { transform: scale(0.92); }
+
+        /* ── Dish info overlay (bottom) ─────────────────────────────── */
+        #dish-overlay {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            z-index: 999;
+            background: linear-gradient(to top, rgba(15,23,42,0.95) 0%, transparent 100%);
+            padding: 32px 20px 28px;
+            pointer-events: none;
+        }
+
+        .dish-overlay-name {
+            font-size: 1.1rem; font-weight: 800;
+            color: var(--text);
+        }
+
+        .dish-overlay-price {
+            font-size: 0.9rem; font-weight: 700;
+            color: var(--accent); margin-top: 3px;
+        }
+
+        /* ── Instruction banner ─────────────────────────────────────── */
+        #instruction-banner {
+            position: fixed; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 999;
+            text-align: center;
+            pointer-events: none;
+            transition: opacity 0.6s;
+        }
+
+        .instruction-icon {
+            font-size: 3rem; display: block; margin-bottom: 12px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @@keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50%       { opacity: 0.7; transform: scale(0.96); }
+        }
+
+        .instruction-text {
+            font-size: 0.9rem; font-weight: 600; color: var(--text);
+            background: var(--surface);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            padding: 10px 20px; border-radius: 20px;
+            display: inline-block;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        }
+
+        /* ── Scanning ring animation ─────────────────────────────────── */
+        .scan-ring {
+            width: 180px; height: 180px;
+            border: 2px solid rgba(59,130,246,0.5);
+            border-radius: 12px;
+            margin: 0 auto 20px;
+            position: relative;
+            animation: scanring 2s ease-in-out infinite;
+        }
+
+        .scan-ring::before, .scan-ring::after {
+            content: '';
+            position: absolute;
+            width: 20px; height: 20px;
+            border-color: var(--accent);
+            border-style: solid;
+        }
+        .scan-ring::before { top: -2px; left: -2px; border-width: 3px 0 0 3px; border-radius: 3px 0 0 0; }
+        .scan-ring::after  { bottom: -2px; right: -2px; border-width: 0 3px 3px 0; border-radius: 0 0 3px 0; }
+
+        @@keyframes scanring {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(59,130,246,0.15); }
+            50%       { box-shadow: 0 0 0 12px rgba(59,130,246,0); }
+        }
+
+        /* ── "Target found" flash ───────────────────────────────────── */
+        #found-flash {
+            position: fixed; inset: 0; z-index: 998;
+            background: rgba(59,130,246,0.15);
+            pointer-events: none; opacity: 0;
+            transition: opacity 0.3s;
+        }
+        #found-flash.show { opacity: 1; }
+
+        /* ── Error / fallback screen ─────────────────────────────────── */
+        #fallback-screen {
+            display: none;
+            position: fixed; inset: 0; z-index: 2000;
+            background: var(--bg);
+            flex-direction: column;
+            align-items: center; justify-content: center;
+            text-align: center; padding: 32px;
+            gap: 12px;
+        }
+        #fallback-screen.show { display: flex; }
+
+        .fallback-icon { font-size: 3rem; }
+        .fallback-title { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+        .fallback-sub   { font-size: 0.82rem; color: var(--muted); max-width: 280px; line-height: 1.5; }
+
+        /* Video player fallback */
+        #fallback-video {
+            width: 100%; max-width: 340px;
+            border-radius: 12px; display: none;
+        }
+
+        .btn-fallback-back {
+            margin-top: 8px;
+            background: var(--accent); border: none; border-radius: 10px;
+            color: #fff; font-weight: 600; font-size: 0.9rem;
+            padding: 10px 24px; cursor: pointer;
+        }
+
+        /* ── Loading screen ─────────────────────────────────────────── */
+        #loading-screen {
+            position: fixed; inset: 0; z-index: 3000;
+            background: var(--bg);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 16px;
+        }
+        .loading-spinner {
+            width: 40px; height: 40px;
+            border: 3px solid var(--surface);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @@keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text { font-size: 0.85rem; color: var(--muted); }
+    </style>
+</head>
+<body>
+
+<!-- ── Loading screen ────────────────────────────────────────────────────── -->
+<div id="loading-screen">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">Starting AR camera…</div>
+</div>
+
+<!-- ── Back button ───────────────────────────────────────────────────────── -->
+<button id="btn-back" onclick="goBack()" aria-label="Back to menu">←</button>
+
+<!-- ── MindAR container ──────────────────────────────────────────────────── -->
+<div id="ar-container"></div>
+
+<!-- ── "Target found" flash ──────────────────────────────────────────────── -->
+<div id="found-flash"></div>
+
+<!-- ── Instruction banner ────────────────────────────────────────────────── -->
+<div id="instruction-banner">
+    <div class="scan-ring"></div>
+    <div class="instruction-text">📷 Point camera at QR code on your table</div>
+</div>
+
+<!-- ── Dish info overlay ─────────────────────────────────────────────────── -->
+<div id="dish-overlay" style="display:none;">
+    <div class="dish-overlay-name" id="overlay-name"></div>
+    <div class="dish-overlay-price" id="overlay-price"></div>
+</div>
+
+<!-- ── Fallback screen (no .mind file / camera error) ───────────────────── -->
+<div id="fallback-screen">
+    <div class="fallback-icon">🎬</div>
+    <div class="fallback-title" id="fallback-title">AR Not Available</div>
+    <div class="fallback-sub" id="fallback-sub">
+        Playing the dish video for you instead.
+    </div>
+    <video id="fallback-video" controls autoplay loop muted playsinline></video>
+    <button class="btn-fallback-back" onclick="goBack()">← Back to Menu</button>
+</div>
+
+<script>
+(function () {
+    // ── Read params from URL query string ────────────────────────────────────
+    const params       = new URLSearchParams(window.location.search);
+    const dishId       = params.get('dishId');
+    const dishName     = params.get('dishName')   || 'Dish';
+    const price        = params.get('price')       || '0';
+    const contentURL   = params.get('contentURL')  || '';
+    const contentType  = params.get('contentType') || 'Video';
+    const qrCodeString = params.get('qrCodeString') || '';
+    const qrImageUrl   = params.get('qrImageUrl')  || '';
+
+    // Derive .mind file URL from QR image URL (replace .png with .mind)
+    // The .mind file must be compiled and uploaded to Azure Blob at this path.
+    // See compilation instructions in the <head> comment above.
+    const mindFileUrl  = qrImageUrl ? qrImageUrl.replace(/\.png$/i, '.mind') : '';
+
+    // ── Populate dish overlay ────────────────────────────────────────────────
+    document.getElementById('overlay-name').textContent  = dishName;
+    document.getElementById('overlay-price').textContent = `₹${parseFloat(price).toFixed(0)}`;
+
+    // ── Back navigation ──────────────────────────────────────────────────────
+    window.goBack = function () {
+        // Return to the AR menu page for this QR code
+        window.location.href = `/ar/menu/${qrCodeString}`;
+    };
+
+    // ── Log DishView scan ────────────────────────────────────────────────────
+    async function logDishView() {
+        if (!qrCodeString || !dishId) return;
+        try {
+            await fetch('/api/scan/log', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    qrCodeString,
+                    dishId:   parseInt(dishId),
+                    scanType: 'DishView'
+                })
+            });
+        } catch (_) { /* non-critical */ }
+    }
+
+    // ── Show video fallback (when .mind file not available or AR fails) ───────
+    function showVideoFallback(reason) {
+        document.getElementById('loading-screen').style.display = 'none';
+        document.getElementById('ar-container').style.display   = 'none';
+        document.getElementById('instruction-banner').style.display = 'none';
+
+        document.getElementById('fallback-title').textContent =
+            reason === 'no-mind' ? 'AR Marker Not Configured' : 'AR Not Available';
+        document.getElementById('fallback-sub').textContent  =
+            reason === 'no-mind'
+                ? 'The AR marker for this table has not been set up yet. Showing video preview instead.'
+                : 'Your browser or device could not start AR. Showing the video instead.';
+
+        if (contentURL) {
+            const vid = document.getElementById('fallback-video');
+            vid.src            = contentURL;
+            vid.style.display  = 'block';
+            vid.play().catch(() => {});
+        }
+
+        document.getElementById('fallback-screen').classList.add('show');
+    }
+
+    // ── Check camera permission ──────────────────────────────────────────────
+    async function checkCamera() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            showVideoFallback('no-camera');
+            return false;
+        }
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+            stream.getTracks().forEach(t => t.stop()); // release immediately
+            return true;
+        } catch (_) {
+            showVideoFallback('no-camera');
+            return false;
+        }
+    }
+
+    // ── MindAR setup ─────────────────────────────────────────────────────────
+    async function startAR() {
+        // 1. Validate we have a .mind file URL
+        if (!mindFileUrl) {
+            showVideoFallback('no-mind');
+            return;
+        }
+
+        // 2. Check camera access
+        const hasCamera = await checkCamera();
+        if (!hasCamera) return;
+
+        // 3. Check .mind file is reachable before starting MindAR
+        //    (avoids a cryptic MindAR internal error if the file 404s)
+        try {
+            const probe = await fetch(mindFileUrl, { method: 'HEAD' });
+            if (!probe.ok) {
+                showVideoFallback('no-mind');
+                return;
+            }
+        } catch (_) {
+            showVideoFallback('no-mind');
+            return;
+        }
+
+        // 4. Initialise MindARThree
+        let mindarThree;
+        try {
+            mindarThree = new window.MINDAR.IMAGE.MindARThree({
+                container:        document.querySelector('#ar-container'),
+                imageTargetSrc:   mindFileUrl,
+                maxTrack:         1,        // track one target at a time
+                uiLoading:        'no',     // we handle our own loading UI
+                uiScanning:       'no',     // we handle our own scanning UI
+                uiError:          'no',
+            });
+        } catch (err) {
+            showVideoFallback('ar-init-failed');
+            return;
+        }
+
+        const { renderer, scene, camera } = mindarThree;
+
+        // 5. Create the video element (NOT attached to DOM — used as texture source)
+        const video = document.createElement('video');
+        video.src         = contentURL;
+        video.crossOrigin = 'anonymous';
+        video.loop        = true;
+        video.muted       = true;
+        video.playsInline = true;
+        video.setAttribute('playsinline', '');
+
+        // 6. Create VideoTexture → PlaneGeometry → Mesh
+        //    The plane is positioned so it floats above the QR code.
+        //    Aspect ratio 16:9 — adjust if your videos are a different ratio.
+        const videoTexture = new THREE.VideoTexture(video);
+        videoTexture.minFilter = THREE.LinearFilter;
+        videoTexture.magFilter = THREE.LinearFilter;
+
+        const geometry = new THREE.PlaneGeometry(1, 9 / 16);  // 16:9 aspect
+        const material = new THREE.MeshBasicMaterial({
+            map:         videoTexture,
+            side:        THREE.DoubleSide,
+            transparent: false,
+        });
+        const videoPlane = new THREE.Mesh(geometry, material);
+
+        // Lift the plane slightly above the QR code surface
+        videoPlane.position.set(0, 0, 0.05);
+
+        // 7. Add anchor for target index 0 (our QR code .mind file has one target)
+        const anchor = mindarThree.addAnchor(0);
+        anchor.group.add(videoPlane);
+
+        // 8. Target found / lost events
+        anchor.onTargetFound = () => {
+            document.getElementById('instruction-banner').style.opacity = '0';
+            document.getElementById('dish-overlay').style.display       = 'block';
+
+            // Brief blue flash to confirm detection
+            const flash = document.getElementById('found-flash');
+            flash.classList.add('show');
+            setTimeout(() => flash.classList.remove('show'), 300);
+
+            // Start video playback
+            video.play().catch(() => {});
+        };
+
+        anchor.onTargetLost = () => {
+            document.getElementById('instruction-banner').style.opacity = '1';
+            video.pause();
+        };
+
+        // 9. Add ambient light (makes MeshBasicMaterial look correct — no shadow)
+        scene.add(new THREE.AmbientLight(0xffffff, 1));
+
+        // 10. Start MindAR
+        try {
+            await mindarThree.start();
+            document.getElementById('loading-screen').style.display = 'none';
+        } catch (err) {
+            showVideoFallback('ar-start-failed');
+            return;
+        }
+
+        // 11. Render loop
+        renderer.setAnimationLoop(() => {
+            renderer.render(scene, camera);
+        });
+
+        // 12. Log the dish view after AR starts
+        logDishView();
+
+        // 13. Handle page leave — stop camera and renderer
+        window.addEventListener('beforeunload', () => {
+            renderer.setAnimationLoop(null);
+            mindarThree.stop();
+        });
+    }
+
+    // ── Boot ─────────────────────────────────────────────────────────────────
+    // Wait for all scripts to be ready before calling MindAR
+    window.addEventListener('load', () => {
+        if (typeof window.MINDAR === 'undefined' || typeof THREE === 'undefined') {
+            showVideoFallback('scripts-failed');
+            return;
+        }
+        startAR();
+    });
+
+})();
+</script>
+
+</body>
+</html>
