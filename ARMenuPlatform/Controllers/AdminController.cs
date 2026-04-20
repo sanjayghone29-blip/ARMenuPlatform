@@ -16,8 +16,8 @@ namespace ARMenuPlatform.Controllers
         // Base URL used when building the AR menu URL embedded in each QR code.
         // Change this to your production domain before going live.
         // e.g. "https://armenu.in"
-        private const string ArMenuBaseUrl = "https://localhost:7001";
-
+        private string ArMenuBaseUrl =>
+            $"{Request.Scheme}://{Request.Host}";
         public AdminController(DbHelper db, IConfiguration config, AzureBlobHelper blob)
         {
             _db = db;

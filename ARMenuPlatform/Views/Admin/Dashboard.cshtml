@@ -384,10 +384,15 @@
                             </td>
                             <td>
                                 <div class="d-flex gap-1 flex-wrap">
-                                    <!-- View (GET — no CSRF needed) -->
-                                    <a href="/Admin/ViewRestaurant/@restId" class="btn-action btn-view">
-                                        <i class="bi bi-eye"></i> View
-                                    </a>
+                                    razor<!-- Dishes -->
+<a href="/Admin/Dishes/@restId" class="btn-action btn-view" title="Manage Dishes">
+    <i class="bi bi-egg-fried"></i> Dishes
+</a>
+
+<!-- QR Codes -->
+<a href="/Admin/Tables/@restId" class="btn-action btn-view" title="Manage QR Codes">
+    <i class="bi bi-qr-code"></i> QR
+</a>
 
                                     <!-- Pause (POST — requires CSRF token) -->
                                     @if (status != "Paused" && status != "Cancelled")

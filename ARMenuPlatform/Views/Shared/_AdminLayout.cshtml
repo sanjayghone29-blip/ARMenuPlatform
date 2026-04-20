@@ -267,31 +267,24 @@
         <div class="sidebar-section">Main</div>
 
         <a class="sidebar-link @(ViewData["ActivePage"]?.ToString() == "Dashboard"    ? "active" : "")"
-           href="/Admin/Dashboard">
-            <i class="bi bi-speedometer2"></i> Dashboard
-        </a>
+       href="/Admin/Dashboard">
+        <i class="bi bi-speedometer2"></i> Dashboard
+    </a>
 
-        <a class="sidebar-link @(ViewData["ActivePage"]?.ToString() == "Restaurants"  ? "active" : "")"
-           href="/Admin/Restaurants">
-            <i class="bi bi-shop"></i> Restaurants
-        </a>
+    <a class="sidebar-link @(ViewData["ActivePage"]?.ToString() == "Dashboard"  ? "active" : "")"
+       href="/Admin/Dashboard">
+        <i class="bi bi-shop"></i> Restaurants
+    </a>
 
-        <a class="sidebar-link @(ViewData["ActivePage"]?.ToString() == "AddRestaurant" ? "active" : "")"
-           href="/Admin/AddRestaurant">
-            <i class="bi bi-plus-circle"></i> Add Restaurant
-        </a>
+    <a class="sidebar-link @(ViewData["ActivePage"]?.ToString() == "AddRestaurant" ? "active" : "")"
+       href="/Admin/AddRestaurant">
+        <i class="bi bi-plus-circle"></i> Add Restaurant
+    </a>
+</nav>
 
-        <div class="sidebar-section">Insights</div>
-
-        <a class="sidebar-link @(ViewData["ActivePage"]?.ToString() == "Analytics"    ? "active" : "")"
-           href="/Admin/Analytics">
-            <i class="bi bi-bar-chart-line"></i> Analytics
-        </a>
-    </nav>
-
-    <div class="sidebar-footer">
-        <a class="sidebar-link logout-link" href="/Logout">
-            <i class="bi bi-box-arrow-left"></i> Logout
+<div class="sidebar-footer">
+    <a class="sidebar-link logout-link" href="/Logout">
+        <i class="bi bi-box-arrow-left"></i> Logout
         </a>
     </div>
 

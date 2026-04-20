@@ -24,8 +24,8 @@
            e.g. /qr-codes/{restaurantId}/Table-N.mind
         5. This app derives the .mind URL from qrImageUrl by replacing .png → .mind
     -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
+     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://unpkg.com/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
 
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -282,6 +282,7 @@
 
     // ── Show video fallback (when .mind file not available or AR fails) ───────
     function showVideoFallback(reason) {
+        alert('AR Fallback reason: ' + reason);
         document.getElementById('loading-screen').style.display = 'none';
         document.getElementById('ar-container').style.display   = 'none';
         document.getElementById('instruction-banner').style.display = 'none';
@@ -442,12 +443,18 @@
     // ── Boot ─────────────────────────────────────────────────────────────────
     // Wait for all scripts to be ready before calling MindAR
     window.addEventListener('load', () => {
-        if (typeof window.MINDAR === 'undefined' || typeof THREE === 'undefined') {
+    // MindAR sometimes takes an extra tick to register on window
+    setTimeout(() => {
+        const threeOk = typeof THREE !== 'undefined';
+        const mindarOk = typeof window.MINDAR !== 'undefined';
+        if (!threeOk || !mindarOk) {
+            alert('Scripts failed - THREE: ' + threeOk + ', MINDAR: ' + mindarOk);
             showVideoFallback('scripts-failed');
             return;
         }
         startAR();
-    });
+    }, 500);
+});
 
 })();
 </script>
