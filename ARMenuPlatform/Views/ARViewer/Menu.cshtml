@@ -447,11 +447,7 @@
             qrImageUrl:   QR_IMAGE_URL
         });
 
-        if (dish.contentType === '3DModel') {
-            // 3D AR — placeholder for Phase 7
-            alert('3D AR coming soon! Video AR is available now.');
-            return;
-        }
+       
 
         window.location.href = `/ar/video?${params.toString()}`;
     }

@@ -12,9 +12,23 @@ builder.Services.AddScoped<DbHelper>();
 builder.Services.AddScoped<AzureBlobHelper>();
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = 524_288_000;
+    options.MultipartBodyLengthLimit = 524_288_000; // 500 MB
+    options.ValueLengthLimit = int.MaxValue;
+    options.MultipartHeadersLengthLimit = int.MaxValue;
 });
-builder.Services.AddDistributedMemoryCache();  // In-memory session store (single server)
+
+// Kestrel request body size (when running in Kestrel directly)
+builder.WebHost.ConfigureKestrel(options =>
+{
+
+    options.Limits.MaxRequestBodySize = 524_288_000; // 500 MB
+});
+
+// IIS request body size (Azure App Service uses IIS)
+builder.Services.Configure<Microsoft.AspNetCore.Builder.IISServerOptions>(options =>
+{
+    options.MaxRequestBodySize = 524_288_000; // 500 MB
+}); builder.Services.AddDistributedMemoryCache();  // In-memory session store (single server)
 
 builder.Services.AddSession(options =>
 {
